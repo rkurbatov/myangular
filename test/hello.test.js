@@ -1,9 +1,9 @@
-var sayHello = require('../src/hello');
+import { sayHello } from '../src/hello'
 
-describe('Hello', function () {
+describe('Hello', () => {
 
-  it('says hello', function (){
+  it('says hello', () => {
     expect(sayHello('Jane')).toBe('Hello, Jane!');
-  });
+  })
 
-});
+})

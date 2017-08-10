@@ -1,5 +1,3 @@
-var _ = require('lodash');
+import { template } from 'lodash'
 
-module.exports = function sayHello(to) {
-  return _.template('Hello, <%= name %>!')({name: to});
-};
+export const sayHello = (to) => template('Hello, <%= name %>!')({name: to})
