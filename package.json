@@ -1,0 +1,26 @@
+{
+  "name": "my-own-angularjs",
+  "version": "0.1.0",
+  "devDependencies": {
+    "browserify": "^14.4.0",
+    "jasmine-core": "^2.7.0",
+    "jshint": "^2.9.5",
+    "jshint-stylish-ex": "^0.2.0",
+    "karma": "^1.7.0",
+    "karma-browserify": "^5.1.1",
+    "karma-jasmine": "^1.1.0",
+    "karma-jshint-preprocessor": "0.0.6",
+    "karma-phantomjs-launcher": "^1.0.4",
+    "phantomjs-prebuilt": "^2.1.14",
+    "sinon": "^3.1.0",
+    "watchify": "^3.9.0"
+  },
+  "scripts": {
+    "lint": "jshint src test --reporter node_modules/jshint-stylish-ex/stylish.js",
+    "test": "karma start"
+  },
+  "dependencies": {
+    "jquery": "^3.2.1",
+    "lodash": "^4.17.4"
+  }
+}
