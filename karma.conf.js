@@ -9,7 +9,13 @@ module.exports = function(config) {
       'src/**/*.js': ['jshint', 'browserify'],
       'test/**/*.js': ['jshint', 'browserify']
     },
-    browsers: ['PhantomJS'],
+    reporters: ['spec', 'clear-screen'],
+    specReporter: {
+      suppressPassed: true,
+      suppressSkipped: true,
+      suppressErrorSummary: true,
+    },
+    browsers: ['ChromeHeadless'],
     browserify: {
       debug: true,
       transform: [
