@@ -330,4 +330,32 @@ describe('Scope', () => {
 
   })
 
+  describe('$eval', () => {
+    let scope
+
+    beforeEach(() => {
+      scope = new Scope()
+    })
+
+    it('executes $evaled function an returns result', () => {
+      scope.aValue = 42
+
+      const result = scope.$eval(
+        (scope) => scope.aValue
+      )
+      expect(result).toBe(42)
+    })
+
+    it('passes the second $eval argument straight through', () => {
+      scope.aValue = 42
+
+      const result = scope.$eval(
+        (scope, arg) => scope.aValue + arg,
+        2
+      )
+      expect(result).toBe(44)
+    })
+
+  })
+
 })

@@ -81,6 +81,10 @@ class Scope {
     } while (dirtyFlag)
   }
 
+  $eval (expr, locals) {
+    return expr(this, locals)
+  }
+
 }
 
 export default Scope
