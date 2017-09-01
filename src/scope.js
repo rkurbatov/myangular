@@ -9,6 +9,7 @@ class Scope {
   constructor () {
     this.$$watchers = []
     this.$$lastDirtyWatch = null // Required for digest loop optimization
+    this.$$asyncQueue = []
   }
 
   $watch (watchFn, listenerFn = () => {}, valueEq = false) {
@@ -76,13 +77,30 @@ class Scope {
     let TTL = 10
     this.$$lastDirtyWatch = null
     do {
+      while (this.$$asyncQueue.length) {
+        const asyncTask = this.$$asyncQueue.shift()
+        asyncTask.scope.$eval(asyncTask.expression)
+      }
       dirtyFlag = this.$$digestOnce()
-      if (dirtyFlag && !(TTL--)) throw new Error('Maximum $watch TTL exceeded')
-    } while (dirtyFlag)
+      if ((dirtyFlag || this.$$asyncQueue.length) && !(TTL--))
+        throw new Error('Maximum $watch TTL exceeded')
+    } while (dirtyFlag || this.$$asyncQueue.length)
   }
 
   $eval (expr, locals) {
     return expr(this, locals)
+  }
+
+  $apply (expr) {
+    try {
+      return this.$eval(expr)
+    } finally {
+      this.$digest()
+    }
+  }
+
+  $evalAsync (expr) {
+    this.$$asyncQueue.push({ scope: this, expression: expr })
   }
 
 }

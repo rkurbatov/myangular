@@ -358,4 +358,112 @@ describe('Scope', () => {
 
   })
 
+  describe('$apply', () => {
+    let scope
+
+    beforeEach(() => {
+      scope = new Scope()
+    })
+
+    it('executes the given function and starts the digest', () => {
+      scope.aValue = 'someValue'
+      scope.counter = 0
+
+      scope.$watch(
+        (scope) => scope.aValue,
+        (newValue, oldValue, scope) => {
+          scope.counter++
+        }
+      )
+
+      scope.$digest()
+      expect(scope.counter).toBe(1)
+
+      scope.$apply(
+        (scope) => scope.aValue = 'someOtherValue'
+      )
+      expect(scope.counter).toBe(2)
+    })
+  })
+
+  describe('$evalAsync', () => {
+    let scope
+
+    beforeEach(() => {
+      scope = new Scope()
+    })
+
+    it('executes given function later in the same cycle', () => {
+      scope.aValue = [1, 2, 3]
+      scope.asyncEvaluated = false
+      scope.asyncEvaluatedImmediately = false
+
+      scope.$watch(
+        (scope) => scope.aValue,
+        (newValue, oldValue, scope) => {
+          scope.$evalAsync((scope) => {
+            scope.asyncEvaluated = true
+          })
+          scope.asyncEvaluatedImmediately = scope.asyncEvaluated
+        }
+      )
+
+      scope.$digest()
+      expect(scope.asyncEvaluated).toBeTruthy()
+      expect(scope.asyncEvaluatedImmediately).toBeFalsy()
+    })
+
+    it('executes $evalAsynced functions added by watch functions', () => {
+      scope.aValue = [1, 2, 3]
+      scope.asyncEvaluatedTimes = 0
+
+      scope.$watch(
+        (scope) => {
+          if (scope.asyncEvaluatedTimes < 2) {
+            scope.$evalAsync((scope) => {
+              scope.asyncEvaluatedTimes++
+            })
+          }
+          return scope.aValue;
+        },
+        (newValue, oldValue, scope) => { }
+      )
+      scope.$digest()
+      expect(scope.asyncEvaluatedTimes).toBe(2)
+    })
+
+    it('executes $evalAsynced functions even when non dirty', () => {
+      scope.aValue = [1, 2, 3]
+      scope.asyncEvaluatedTimes = 0
+
+      scope.$watch(
+        (scope) => {
+          if (!scope.asyncEvaluated) {
+            scope.$evalAsync((scope) => {
+              scope.asyncEvaluated = true
+            })
+          }
+          return scope.aValue;
+        },
+        (newValue, oldValue, scope) => { }
+      )
+      scope.$digest()
+      expect(scope.asyncEvaluated).toBeTruthy()
+    })
+
+    it('eventually halts $evalAsyncs added by watches', () => {
+      scope.aValue = [1, 2, 3]
+
+      scope.$watch(
+        (scope) => {
+          scope.$evalAsync((scope) => {})
+          return scope.aValue;
+        },
+        (newValue, oldValue, scope) => { }
+      )
+      expect(() => scope.$digest()).toThrow()
+    })
+
+  })
+
 })
