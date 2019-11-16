@@ -54,25 +54,26 @@ class Scope {
 
   $$digestOnce() {
     let dirtyFlag = false;
-    // Array#every allows short circuiting by return of false values
+    // Reverse order allows to have watchers removed during the digest cycle without skipping
     forEachRight(this.$$watchers, watcher => {
-      if (!watcher) return false; // Watcher was removed in some other watcher, we should skip
       try {
-        const newValue = watcher.watchFn(this);
-        const oldValue = watcher.last;
-        if (!Scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
-          this.$$lastDirtyWatch = watcher;
-          // We're preventing leakage of the initWatchVal out of scope
-          // and sending newValue as on oldValue for the first digest
-          const oldValueToPass =
-            oldValue === INIT_WATCH_VALUE ? newValue : oldValue;
-          watcher.listenerFn(newValue, oldValueToPass, this);
-          watcher.last = watcher.valueEq ? cloneDeep(newValue) : newValue;
-          dirtyFlag = true;
-        } else if (watcher === this.$$lastDirtyWatch) {
-          // No need to run remaining watchers as we've just run last dirty of them.
-          // Returning 'false' value stops forEach cycle.
-          return false;
+        if (watcher) { // Watcher could be removed by other watcher
+          const newValue = watcher.watchFn(this);
+          const oldValue = watcher.last;
+          if (!Scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+            this.$$lastDirtyWatch = watcher;
+            // We're preventing leakage of the initWatchVal out of scope
+            // and sending newValue as on oldValue for the first digest
+            const oldValueToPass =
+              oldValue === INIT_WATCH_VALUE ? newValue : oldValue;
+            watcher.listenerFn(newValue, oldValueToPass, this);
+            watcher.last = watcher.valueEq ? cloneDeep(newValue) : newValue;
+            dirtyFlag = true;
+          } else if (watcher === this.$$lastDirtyWatch) {
+            // No need to run remaining watchers as we've just run last dirty of them.
+            // Returning 'false' value stops forEach cycle.
+            return false;
+          }
         }
       } catch (err) {
         console.error(err);
@@ -96,8 +97,12 @@ class Scope {
 
     do {
       while (this.$$asyncQueue.length) {
-        const asyncTask = this.$$asyncQueue.shift();
-        asyncTask.scope.$eval(asyncTask.expression);
+        try {
+          const asyncTask = this.$$asyncQueue.shift();
+          asyncTask.scope.$eval(asyncTask.expression);
+        } catch (err) {
+          console.error(err);
+        }
       }
       dirtyFlag = this.$$digestOnce();
       TTL--;
@@ -109,7 +114,11 @@ class Scope {
     this.$clearPhase();
 
     while (this.$$postDigestQueue.length) {
-      this.$$postDigestQueue.shift()();
+      try {
+        this.$$postDigestQueue.shift()();
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 
@@ -159,7 +168,11 @@ class Scope {
 
   $$flushApplyAsync() {
     while (this.$$applyAsyncQueue.length) {
-      this.$$applyAsyncQueue.shift()();
+      try {
+        this.$$applyAsyncQueue.shift()();
+      } catch (err) {
+        console.error(err);
+      }
     }
     this.$$applyAsyncId = null;
   }
