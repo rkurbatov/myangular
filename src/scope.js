@@ -11,6 +11,7 @@ class Scope {
     this.$$asyncQueue = [];
     this.$$applyAsyncQueue = [];
     this.$$applyAsyncId = null; // Set if applyAsync timeout has been scheduled
+    this.$$postDigestQueue = [];
     this.$$phase = null; // "$digest" | "$apply" | null
   }
 
@@ -106,6 +107,10 @@ class Scope {
       }
     } while (dirtyFlag || this.$$asyncQueue.length);
     this.$clearPhase();
+
+    while (this.$$postDigestQueue.length) {
+      this.$$postDigestQueue.shift()();
+    }
   }
 
   // Executes the code in context of scope
@@ -168,6 +173,11 @@ class Scope {
 
   $clearPhase() {
     this.$$phase = null;
+  }
+
+  // Puts the function to be executed after the next digest cycle without running the digest.
+  $$postDigest(fn) {
+    this.$$postDigestQueue.push(fn);
   }
 }
 
