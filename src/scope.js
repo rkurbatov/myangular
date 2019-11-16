@@ -83,7 +83,8 @@ class Scope {
         asyncTask.scope.$eval(asyncTask.expression);
       }
       dirtyFlag = this.$$digestOnce();
-      if ((dirtyFlag || this.$$asyncQueue.length) && !TTL--)
+      TTL -= 1;
+      if ((dirtyFlag || this.$$asyncQueue.length) && !TTL)
         throw new Error("Maximum $watch TTL exceeded");
     } while (dirtyFlag || this.$$asyncQueue.length);
   }

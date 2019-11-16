@@ -444,7 +444,7 @@ describe("Scope", () => {
       expect(scope.asyncEvaluatedTimes).toBe(2);
     });
 
-    it("executes $evalAsynced functions even when non dirty", () => {
+    it("executes $evalAsync'ed functions even when non dirty", () => {
       scope.aValue = [1, 2, 3];
       scope.asyncEvaluatedTimes = 0;
 
