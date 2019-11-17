@@ -1,4 +1,4 @@
-import { isEqual, forEachRight, cloneDeep } from "lodash";
+import { isEqual, forEach, forEachRight, cloneDeep } from "lodash";
 
 // Symbol is a reference value, as it equals only to itself.
 // It is set as an initial watch value to distinct it from undefined
@@ -57,7 +57,8 @@ class Scope {
     // Reverse order allows to have watchers removed during the digest cycle without skipping
     forEachRight(this.$$watchers, watcher => {
       try {
-        if (watcher) { // Watcher could be removed by other watcher
+        if (watcher) {
+          // Watcher could be removed by other watcher
           const newValue = watcher.watchFn(this);
           const oldValue = watcher.last;
           if (!Scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
@@ -191,6 +192,53 @@ class Scope {
   // Puts the function to be executed after the next digest cycle without running the digest.
   $$postDigest(fn) {
     this.$$postDigestQueue.push(fn);
+  }
+
+  $watchGroup(watchFns, listenerFn) {
+    const newValues = new Array(watchFns.length);
+    const oldValues = new Array(watchFns.length);
+
+    let changeReactionScheduled = false; // The flag signalling listener is scheduled already
+    let firstRun = true;
+
+    // Early return on empty watchers array
+    if (watchFns.length === 0) {
+      let shouldCall = true;
+      this.$evalAsync(() => {
+        if (shouldCall) {
+          listenerFn(newValues, newValues, this);
+        }
+      });
+      return () => {
+        shouldCall = false;
+      };
+    }
+
+    const watchGroupListener = () => {
+      if (firstRun) {
+        firstRun = false;
+        // Pass newValues as oldValues for the first run
+        listenerFn(newValues, newValues, this);
+      } else {
+        listenerFn(newValues, oldValues, this);
+      }
+      changeReactionScheduled = false;
+    };
+
+    const destroyFns = watchFns.map((watchFn, i) =>
+      this.$watch(watchFn, (newValue, oldValue) => {
+        newValues[i] = newValue;
+        oldValues[i] = oldValue;
+        if (!changeReactionScheduled) {
+          changeReactionScheduled = true;
+          this.$evalAsync(watchGroupListener);
+        }
+      })
+    );
+
+    return () => {
+      destroyFns.forEach(destroyFn => destroyFn());
+    };
   }
 }
 
