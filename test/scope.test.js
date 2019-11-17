@@ -1053,4 +1053,326 @@ describe("Scope", () => {
       expect(child.counter).toBe(2);
     });
   });
+
+  describe("$watchCollection", () => {
+    let scope;
+    beforeEach(() => {
+      scope = new Scope();
+    });
+
+    it("works like a normal watch for non-collections", () => {
+      var valueProvided;
+      scope.aValue = 42;
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.aValue,
+        (newValue, oldValue, scope) => {
+          valueProvided = newValue;
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      expect(valueProvided).toBe(scope.aValue);
+      scope.aValue = 43;
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("works like a normal watch for NaNs", () => {
+      scope.aValue = 0 / 0;
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.aValue,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+    });
+    it("notices when the value becomes an array", () => {
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arr,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.arr = [1, 2, 3];
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices an item added to an array", () => {
+      scope.arr = [1, 2, 3];
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arr,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.arr.push(4);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices an item removed from an array", () => {
+      scope.arr = [1, 2, 3];
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arr,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.arr.shift();
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices an item replaced in an array", () => {
+      scope.arr = [1, 2, 3];
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arr,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.arr[1] = 42;
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices items reordered in an array", () => {
+      scope.arr = [2, 1, 3];
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arr,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.arr.sort();
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("does not fail on NaNs in arrays", () => {
+      scope.arr = [2, NaN, 3];
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arr,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+    });
+    it("notices an item replaced in an arguments object", () => {
+      (function() {
+        scope.arrayLike = arguments;
+      })(1, 2, 3);
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arrayLike,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.arrayLike[1] = 42;
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices an item replaced in a NodeList object", () => {
+      document.documentElement.appendChild(document.createElement("div"));
+      scope.arrayLike = document.getElementsByTagName("div");
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.arrayLike,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      document.documentElement.appendChild(document.createElement("div"));
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices when the value becomes an object", () => {
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.obj,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.obj = { a: 1 };
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices when an attribute is added to an object", () => {
+      scope.counter = 0;
+      scope.obj = { a: 1 };
+      scope.$watchCollection(
+        scope => scope.obj,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.obj.b = 2;
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("notices when an attribute is changed in an object", () => {
+      scope.counter = 0;
+      scope.obj = { a: 1 };
+      scope.$watchCollection(
+        scope => scope.obj,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      scope.obj.a = 2;
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("does not fail on NaN attributes in objects", () => {
+      scope.counter = 0;
+      scope.obj = { a: NaN };
+      scope.$watchCollection(
+        scope => scope.obj,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+    });
+    it("notices when an attribute is removed from an object", () => {
+      scope.counter = 0;
+      scope.obj = { a: 1 };
+      scope.$watchCollection(
+        scope => scope.obj,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      expect(scope.counter).toBe(1);
+      delete scope.obj.a;
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("does not consider any object with a length property an array", () => {
+      scope.obj = { length: 42, otherKey: "abc" };
+      scope.counter = 0;
+      scope.$watchCollection(
+        scope => scope.obj,
+        (newValue, oldValue, scope) => {
+          scope.counter++;
+        }
+      );
+      scope.$digest();
+      scope.obj.newKey = "def";
+      scope.$digest();
+      expect(scope.counter).toBe(2);
+    });
+    it("gives the old non-collection value to listeners", () => {
+      scope.aValue = 42;
+      var oldValueGiven;
+      scope.$watchCollection(
+        scope => scope.aValue,
+        (newValue, oldValue, scope) => {
+          oldValueGiven = oldValue;
+        }
+      );
+      scope.$digest();
+      scope.aValue = 43;
+      scope.$digest();
+      expect(oldValueGiven).toBe(42);
+    });
+    it("gives the old array value to listeners", () => {
+      scope.aValue = [1, 2, 3];
+      var oldValueGiven;
+      scope.$watchCollection(
+        scope => scope.aValue,
+        (newValue, oldValue, scope) => {
+          oldValueGiven = oldValue;
+        }
+      );
+      scope.$digest();
+      scope.aValue.push(4);
+      scope.$digest();
+      expect(oldValueGiven).toEqual([1, 2, 3]);
+    });
+    it("gives the old object value to listeners", () => {
+      scope.aValue = { a: 1, b: 2 };
+      var oldValueGiven;
+      scope.$watchCollection(
+        scope => scope.aValue,
+        (newValue, oldValue, scope) => {
+          oldValueGiven = oldValue;
+        }
+      );
+      scope.$digest();
+      scope.aValue.c = 3;
+      scope.$digest();
+      expect(oldValueGiven).toEqual({ a: 1, b: 2 });
+    });
+    it("uses the new value as the old value on first digest", () => {
+      scope.aValue = { a: 1, b: 2 };
+      var oldValueGiven;
+      scope.$watchCollection(
+        scope => scope.aValue,
+        (newValue, oldValue, scope) => {
+          oldValueGiven = oldValue;
+        }
+      );
+      scope.$digest();
+      expect(oldValueGiven).toEqual({ a: 1, b: 2 });
+    });
+  });
 });

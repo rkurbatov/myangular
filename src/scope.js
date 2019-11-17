@@ -1,4 +1,12 @@
-import { isEqual, forEach, forEachRight, cloneDeep } from "lodash";
+import {
+  isEqual,
+  isObject,
+  forEach,
+  forEachRight,
+  forOwn,
+  clone,
+  cloneDeep
+} from "lodash";
 
 // Symbol is a reference value, as it equals only to itself.
 // It is set as an initial watch value to distinct it from undefined
@@ -54,6 +62,17 @@ class Scope {
         (Number.isNaN(newValue) && Number.isNaN(oldValue))
       );
     }
+  }
+
+  static $$isArrayLike(item) {
+    return (
+      Array.isArray(item) ||
+      (!!item &&
+        typeof item === "object" &&
+        item.hasOwnProperty("length") &&
+        typeof item.length === "number" &&
+        (item.length === 0 || (item.length > 0 && item.length - 1 in item)))
+    );
   }
 
   // Recursively calls the fn function for every scope in the hierarchy until it returns false.
@@ -259,6 +278,93 @@ class Scope {
     return () => {
       destroyFns.forEach(destroyFn => destroyFn());
     };
+  }
+
+  // Watches collection changes — intermediate between watch and watch with shallow equality
+  $watchCollection(watchFn, listenerFn) {
+    let newValue;
+    let oldValue;
+    let oldLength; // Keep length of old object value to prevent non-required object iterations
+    let veryOldValue; // Non-modified version of newValue for listener
+    let trackVeryOldValue = listenerFn.length > 1; // Listener is called with 2 or 3 args: newVal, oldVal, scope
+    let changeCount = 0; // counter inside watchFn closure increases on every detected change
+    let firstRun = true;
+
+    const internalWatchFn = scope => {
+      let newLength;
+      newValue = watchFn(scope);
+      if (isObject(newValue)) {
+        if (Scope.$$isArrayLike(newValue)) {
+          if (!Array.isArray(oldValue)) {
+            changeCount++;
+            oldValue = [];
+          }
+          if (newValue.length !== oldValue.length) {
+            changeCount++;
+            oldValue.length = newValue.length;
+          }
+          // LoDash #forEach supports array-like objects
+          forEach(newValue, (newItem, i) => {
+            const bothNaN = Number.isNaN(newItem) && Number.isNaN(oldValue[i]);
+            if (!bothNaN && oldValue[i] !== newItem) {
+              changeCount++;
+              oldValue[i] = newItem;
+            }
+          });
+        } else {
+          if (!isObject(oldValue) || Scope.$$isArrayLike(oldValue)) {
+            changeCount++;
+            oldValue = {};
+            oldLength = 0;
+          }
+          newLength = 0;
+          forOwn(newValue, (newVal, key) => {
+            newLength++;
+            if (oldValue.hasOwnProperty(key)) {
+              const bothNaN =
+                Number.isNaN(newVal) && Number.isNaN(oldValue[key]);
+              if (!bothNaN && newVal !== oldValue[key]) {
+                changeCount++;
+                oldValue[key] = newVal;
+              }
+            } else {
+              changeCount++;
+              oldLength++;
+              oldValue[key] = newVal;
+            }
+          });
+          if (oldLength > newLength) {
+            changeCount++;
+            forOwn(oldValue, (oldVal, key) => {
+              if (!newValue.hasOwnProperty(key)) {
+                oldLength--;
+                changeCount++;
+                delete oldValue[key];
+              }
+            });
+          }
+        }
+      } else {
+        if (!Scope.$$areEqual(oldValue, newValue, false)) {
+          changeCount++;
+        }
+        oldValue = newValue;
+      }
+      return changeCount; // $watch call will compare old and new counter on every collection change
+    };
+    const internalListenerFn = () => {
+      if (firstRun) {
+        firstRun = false;
+        listenerFn(newValue, newValue, this);
+      } else {
+        listenerFn(newValue, veryOldValue, this);
+      }
+      if (trackVeryOldValue) {
+        veryOldValue = clone(newValue);
+      }
+    };
+
+    return this.$watch(internalWatchFn, internalListenerFn);
   }
 
   // Creates the parent scope. If isolate is true the scope will be isolated
