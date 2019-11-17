@@ -23,6 +23,7 @@ class Scope {
     this.$$applyAsyncId = null; // Set if applyAsync timeout has been scheduled ($root only)
     this.$$postDigestQueue = [];
     this.$$phase = null; // "$digest" | "$apply" | null
+    this.$$listeners = {};
   }
 
   // $watch function attaches watcher to the scope
@@ -387,8 +388,9 @@ class Scope {
     }
 
     child.$parent = parent;
-    child.$$watchers = []; // Child scope should have its own watchers so we are shadowing parent's value
-    child.$$children = []; // The same for children.
+    child.$$watchers = []; // Child scope should have its own watchers, children and listeners
+    child.$$children = []; // so we are shadowing parent's value
+    child.$$listeners = {};
     parent.$$children.push(child);
     return child;
   }
@@ -398,8 +400,73 @@ class Scope {
     const siblings = this.$parent.$$children;
     const indexOfThis = siblings.indexOf(this);
     if (indexOfThis >= 0) {
+      this.$broadcast("$destroy");
       siblings.splice(indexOfThis, 1);
     }
+  }
+
+  $on(eventName, listener) {
+    if (this.$$listeners[eventName]) {
+      this.$$listeners[eventName].push(listener);
+    } else {
+      this.$$listeners[eventName] = [listener];
+    }
+    return () => {
+      const index = this.$$listeners[eventName].indexOf(listener);
+      if (index >= 0) {
+        this.$$listeners[eventName].splice(index, 1);
+      }
+    };
+  }
+
+  $emit(eventName, ...rest) {
+    let propagationStopped = false;
+    const event = {
+      name: eventName,
+      targetScope: this,
+      stopPropagation: () => {
+        propagationStopped = true;
+      },
+      preventDefault: () => {
+        event.defaultPrevented = true;
+      }
+    };
+    let scope = this;
+    do {
+      event.currentScope = scope;
+      scope.$$fireEventOnScope(eventName, event, ...rest);
+      scope = scope.$parent;
+    } while (scope && !propagationStopped);
+    event.currentScope = null;
+    return event;
+  }
+
+  // Broadcast is expensive as broadcasted events cannot be stopped.
+  $broadcast(eventName, ...rest) {
+    const event = {
+      name: eventName,
+      targetScope: this,
+      preventDefault: () => {
+        event.defaultPrevented = true;
+      }
+    };
+    this.$$everyScope(scope => {
+      event.currentScope = scope;
+      scope.$$fireEventOnScope(eventName, event, ...rest);
+      return true;
+    });
+    event.currentScope = null;
+    return event;
+  }
+
+  $$fireEventOnScope(eventName, event, ...rest) {
+    (this.$$listeners[eventName] || []).forEach(listener => {
+      try {
+        listener(event, ...rest);
+      } catch (err) {
+        console.error(err);
+      }
+    });
   }
 }
 
