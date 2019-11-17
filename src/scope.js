@@ -273,20 +273,27 @@ class Scope {
       child.$$postDigestQueue = parent.$$postDigestQueue;
       child.$$applyAsyncQueue = parent.$$applyAsyncQueue;
     } else {
-      const ChildScope = class {
-        constructor() {
-          this.$$watchers = []; // Child scope should have its own watchers so we are shadowing parent's value
-          this.$$children = []; // The same for children.
-        }
-      };
+      const ChildScope = class {};
       // Class cannot extend object (this) so we need to set prototype explicitly
       Object.setPrototypeOf(ChildScope.prototype, this);
 
       child = new ChildScope();
     }
 
+    child.$parent = parent;
+    child.$$watchers = []; // Child scope should have its own watchers so we are shadowing parent's value
+    child.$$children = []; // The same for children.
     parent.$$children.push(child);
     return child;
+  }
+
+  $destroy() {
+    if (this === this.$root) return; // Don't destroy root scope
+    const siblings = this.$parent.$$children;
+    const indexOfThis = siblings.indexOf(this);
+    if (indexOfThis >= 0) {
+      siblings.splice(indexOfThis, 1);
+    }
   }
 }
 
