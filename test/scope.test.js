@@ -1473,6 +1473,17 @@ describe("Scope", () => {
           expect(event.defaultPrevented).toBe(true);
         }
       );
+      it("does not skip the next listener when removed on " + method, () => {
+        let deregister;
+        const listener = () => {
+          deregister();
+        };
+        const nextListener = jasmine.createSpy();
+        deregister = scope.$on("someEvent", listener);
+        scope.$on("someEvent", nextListener);
+        scope[method]("someEvent");
+        expect(nextListener).toHaveBeenCalled();
+      });
       it("does not stop on exceptions on " + method, () => {
         const listener1 = event => {
           throw "listener1 throwing an exception";
@@ -1620,6 +1631,13 @@ describe("Scope", () => {
       child.$on("$destroy", listener);
       scope.$destroy();
       expect(listener).toHaveBeenCalled();
+    });
+    it("no longers calls listeners after destroyed", () => {
+      const listener = jasmine.createSpy();
+      scope.$on("myEvent", listener);
+      scope.$destroy();
+      scope.$emit("myEvent");
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });

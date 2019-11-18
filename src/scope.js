@@ -22,8 +22,8 @@ class Scope {
     this.$$applyAsyncQueue = [];
     this.$$applyAsyncId = null; // Set if applyAsync timeout has been scheduled ($root only)
     this.$$postDigestQueue = [];
-    this.$$phase = null; // "$digest" | "$apply" | null
     this.$$listeners = {};
+    this.$$phase = null; // "$digest" | "$apply" | null
   }
 
   // $watch function attaches watcher to the scope
@@ -403,6 +403,8 @@ class Scope {
       this.$broadcast("$destroy");
       siblings.splice(indexOfThis, 1);
     }
+    this.$$watchers = null;
+    this.$$listeners = {};
   }
 
   // Fills the map of event handlers for the current scope.
@@ -415,8 +417,10 @@ class Scope {
     // Returns the destroyer function
     return () => {
       const index = this.$$listeners[eventName].indexOf(listener);
+      // Mark listener as null in case one of the listeners removes another one.
+      // Array splicing will be done in fireEventOnScope function.
       if (index >= 0) {
-        this.$$listeners[eventName].splice(index, 1);
+        this.$$listeners[eventName][index] = null;
       }
     };
   }
@@ -465,13 +469,21 @@ class Scope {
   }
 
   $$fireEventOnScope(eventName, event, ...rest) {
-    (this.$$listeners[eventName] || []).forEach(listener => {
-      try {
-        listener(event, ...rest);
-      } catch (err) {
-        console.error(err);
+    const listeners = this.$$listeners[eventName] || [];
+    let i = 0;
+
+    while (i < listeners.length) {
+      if (listeners[i] === null) {
+        listeners.splice(i, 1);
+      } else {
+        try {
+          listeners[i](event, ...rest);
+        } catch (err) {
+          console.error(err);
+        }
+        i++;
       }
-    });
+    }
   }
 }
 
