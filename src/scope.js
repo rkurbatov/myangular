@@ -405,12 +405,14 @@ class Scope {
     }
   }
 
+  // Fills the map of event handlers for the current scope.
   $on(eventName, listener) {
     if (this.$$listeners[eventName]) {
       this.$$listeners[eventName].push(listener);
     } else {
       this.$$listeners[eventName] = [listener];
     }
+    // Returns the destroyer function
     return () => {
       const index = this.$$listeners[eventName].indexOf(listener);
       if (index >= 0) {
@@ -419,6 +421,8 @@ class Scope {
     };
   }
 
+  // All scopes upwards till the root scope receive events.
+  // Propagation can be stopped.
   $emit(eventName, ...rest) {
     let propagationStopped = false;
     const event = {
@@ -442,6 +446,7 @@ class Scope {
   }
 
   // Broadcast is expensive as broadcasted events cannot be stopped.
+  // All scopes beneath receive events recursively.
   $broadcast(eventName, ...rest) {
     const event = {
       name: eventName,
