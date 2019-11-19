@@ -5,8 +5,8 @@ module.exports = function(config) {
     frameworks: ["browserify", "jasmine"],
     files: ["src/**/*.js", "test/**/*.test.js"],
     preprocessors: {
-      "src/**/*.js": ["jshint", "browserify"],
-      "test/**/*.js": ["jshint", "browserify"]
+      "src/**/*.js": ["browserify"],
+      "test/**/*.js": ["browserify"]
     },
     reporters: ["spec", "clear-screen"],
     specReporter: {
@@ -21,7 +21,9 @@ module.exports = function(config) {
         [
           "babelify",
           {
-            ignore: /node_modules/
+            plugins: ["@babel/plugin-proposal-class-properties"],
+            presets: ["@babel/preset-env"],
+            ignore: [/node_modules/]
           }
         ]
       ],
