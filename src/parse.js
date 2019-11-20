@@ -1,14 +1,17 @@
 // Splits input string on tokens
 class Lexer {
   lex(text) {
-    this.text = text;
-    this.index = 0;
-    this.ch = undefined;
-    this.tokens = [];
+    this.text = text; // program text to parse
+    this.index = 0; // current character index
+    this.ch = undefined; // current character
+    this.tokens = []; // parsed tokens
 
     while (this.index < this.text.length) {
       this.ch = this.text.charAt(this.index);
-      if (this.isNumber(this.ch)) {
+      if (
+        this.isNumber(this.ch) ||
+        (this.ch === "." && this.isNumber(this.peek()))
+      ) {
         this.readNumber();
       } else {
         throw "Unexpected next character: " + this.ch;
@@ -16,6 +19,13 @@ class Lexer {
     }
 
     return this.tokens;
+  }
+
+  // Peeks next symbol (if any)
+  peek() {
+    return this.index < this.text.length - 1
+      ? this.text.charAt(this.index + 1)
+      : false;
   }
 
   isNumber(ch) {
@@ -26,7 +36,7 @@ class Lexer {
     let number = "";
     while (this.index < this.text.length) {
       const ch = this.text.charAt(this.index);
-      if (this.isNumber(ch)) {
+      if (ch === "." || this.isNumber(ch)) {
         number += ch;
       } else {
         break;
