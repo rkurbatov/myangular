@@ -32,14 +32,36 @@ class Lexer {
     return "0" <= ch && ch <= "9";
   }
 
+  isExpOperator(ch) {
+    return ch === "-" || ch === "+" || this.isNumber(ch);
+  }
+
   readNumber() {
     let number = "";
     while (this.index < this.text.length) {
-      const ch = this.text.charAt(this.index);
+      const ch = this.text.charAt(this.index).toLowerCase();
       if (ch === "." || this.isNumber(ch)) {
         number += ch;
       } else {
-        break;
+        const nextCh = this.peek();
+        const prevCh = number.charAt(number.length - 1);
+        if (ch === "e" && this.isExpOperator(nextCh)) {
+          number += ch;
+        } else if (
+          this.isExpOperator(ch) &&
+          prevCh === "e" &&
+          nextCh &&
+          this.isNumber(nextCh)
+        ) {
+          number += ch;
+        } else if (
+          (this.isExpOperator(ch) && prevCh === "e" && !nextCh) ||
+          !this.isNumber(ch)
+        ) {
+          throw "Invlaid exponent!";
+        } else {
+          break;
+        }
       }
       this.index++;
     }
