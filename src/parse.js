@@ -1,4 +1,4 @@
-import { isString } from "lodash";
+import { isString, isNull } from "lodash";
 
 const ESCAPES = {
   n: "\n",
@@ -27,6 +27,8 @@ class Lexer {
         this.readNumber();
       } else if (this.ch === "'" || this.ch === '"') {
         this.readString(this.ch);
+      } else if (this.isIdent(this.ch)) {
+        this.readIdent();
       } else {
         throw "Unexpected next character: " + this.ch;
       }
@@ -48,6 +50,15 @@ class Lexer {
 
   isExpOperator(ch) {
     return ch === "-" || ch === "+" || this.isNumber(ch);
+  }
+
+  isIdent(ch) {
+    return (
+      (ch >= "a" && ch <= "z") ||
+      (ch >= "A" && ch <= "Z") ||
+      ch === "_" ||
+      ch === "$"
+    );
   }
 
   readNumber() {
@@ -126,6 +137,21 @@ class Lexer {
     }
     throw "Unmatched quote";
   }
+
+  readIdent() {
+    let text = "";
+    while (this.index < this.text.length) {
+      const ch = this.text.charAt(this.index);
+      if (this.isIdent(ch) || this.isNumber(ch)) {
+        text += ch;
+      } else {
+        break;
+      }
+      this.index++;
+    }
+    const token = { text: text };
+    this.tokens.push(token);
+  }
 }
 
 // Builds Abstract Syntax Tree out of tokens
@@ -140,7 +166,15 @@ class AST {
   }
 
   program() {
-    return { type: AST.Program, body: this.constant() };
+    return { type: AST.Program, body: this.primary() };
+  }
+
+  primary() {
+    if (AST.constants.hasOwnProperty(this.tokens[0].text)) {
+      return AST.constants[this.tokens[0].text];
+    } else {
+      return this.constant();
+    }
   }
 
   constant() {
@@ -149,6 +183,11 @@ class AST {
 
   static Program = "Program";
   static Literal = "Literal";
+  static constants = {
+    null: { type: AST.Literal, value: null },
+    true: { type: AST.Literal, value: true },
+    false: { type: AST.Literal, value: false }
+  };
 }
 
 // Compiles AST into Expression Function
@@ -174,6 +213,8 @@ class ASTCompiler {
         ) +
         "'"
       );
+    } else if (isNull(value)) {
+      return "null";
     } else {
       return value;
     }
