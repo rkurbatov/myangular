@@ -1,3 +1,15 @@
+import { isString } from "lodash";
+
+const ESCAPES = {
+  n: "\n",
+  f: "\f",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+  "'": "'",
+  '"': '"'
+};
+
 // Splits input string on tokens
 class Lexer {
   lex(text) {
@@ -13,6 +25,8 @@ class Lexer {
         (this.ch === "." && this.isNumber(this.peek()))
       ) {
         this.readNumber();
+      } else if (this.ch === "'" || this.ch === '"') {
+        this.readString(this.ch);
       } else {
         throw "Unexpected next character: " + this.ch;
       }
@@ -70,6 +84,48 @@ class Lexer {
       value: Number(number)
     });
   }
+
+  // Takes quote symbol (either ' or ") as an input param
+  readString(quote) {
+    this.index++;
+    let string = "";
+    let escape = false;
+    while (this.index < this.text.length) {
+      var ch = this.text.charAt(this.index);
+      // Parse escaped strings - either Unicode or standard ASCII escape-sequences
+      if (escape) {
+        if (ch === "u") {
+          const hex = this.text.substring(this.index + 1, this.index + 5);
+          if (!hex.match(/[\da-f]{4}/i)) {
+            throw "Invalid unicode escape";
+          }
+          this.index += 4;
+          string += String.fromCharCode(parseInt(hex, 16));
+        } else {
+          const replacement = ESCAPES[ch];
+          if (replacement) {
+            string += replacement;
+          } else {
+            string += ch;
+          }
+        }
+        escape = false;
+      } else if (ch === quote) {
+        this.index++;
+        this.tokens.push({
+          text: string,
+          value: string
+        });
+        return;
+      } else if (ch === "\\") {
+        escape = true;
+      } else {
+        string += ch;
+      }
+      this.index++;
+    }
+    throw "Unmatched quote";
+  }
 }
 
 // Builds Abstract Syntax Tree out of tokens
@@ -108,15 +164,34 @@ class ASTCompiler {
     return new Function(this.state.body.join(""));
   }
 
+  escape(value) {
+    if (isString(value)) {
+      return (
+        "'" +
+        value.replace(
+          ASTCompiler.stringEscapeRegex,
+          ASTCompiler.stringEscapeFn
+        ) +
+        "'"
+      );
+    } else {
+      return value;
+    }
+  }
+
   recurse(ast) {
     switch (ast.type) {
       case AST.Program:
         this.state.body.push("return ", this.recurse(ast.body), ";");
         break;
       case AST.Literal:
-        return ast.value;
+        return this.escape(ast.value);
     }
   }
+
+  static stringEscapeRegex = /[^ a-zA-Z0-9]/g;
+  static stringEscapeFn = c =>
+    "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4);
 }
 
 class Parser {
