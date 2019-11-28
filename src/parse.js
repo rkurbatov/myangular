@@ -29,6 +29,8 @@ class Lexer {
         this.readString(this.ch);
       } else if (this.isIdent(this.ch)) {
         this.readIdent();
+      } else if (this.isWhiteSpace(this.ch)) {
+        this.index++;
       } else {
         throw "Unexpected next character: " + this.ch;
       }
@@ -61,6 +63,10 @@ class Lexer {
     );
   }
 
+  isWhiteSpace(ch) {
+    return [" ", "\r", "\t", "\n", "\v", "\u00A0"].includes(ch);
+  }
+
   readNumber() {
     let number = "";
     while (this.index < this.text.length) {
@@ -80,8 +86,9 @@ class Lexer {
         ) {
           number += ch;
         } else if (
-          (this.isExpOperator(ch) && prevCh === "e" && !nextCh) ||
-          !this.isNumber(ch)
+          this.isExpOperator(ch) &&
+          prevCh === "e" &&
+          (!nextCh || !this.isNumber(ch))
         ) {
           throw "Invlaid exponent!";
         } else {
