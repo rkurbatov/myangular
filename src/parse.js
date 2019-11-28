@@ -27,6 +27,11 @@ class Lexer {
         this.readNumber();
       } else if (this.ch === "'" || this.ch === '"') {
         this.readString(this.ch);
+      } else if (this.ch === "[" || this.ch === "]" || this.ch === ",") {
+        this.tokens.push({
+          text: this.ch
+        });
+        this.index++;
       } else if (this.isIdent(this.ch)) {
         this.readIdent();
       } else if (this.isWhiteSpace(this.ch)) {
@@ -177,19 +182,60 @@ class AST {
   }
 
   primary() {
-    if (AST.constants.hasOwnProperty(this.tokens[0].text)) {
-      return AST.constants[this.tokens[0].text];
+    if (this.expect("[")) {
+      return this.arrayDeclaration();
+    } else if (AST.constants.hasOwnProperty(this.tokens[0].text)) {
+      return AST.constants[this.consume().text];
     } else {
       return this.constant();
     }
   }
 
   constant() {
-    return { type: AST.Literal, value: this.tokens[0].value };
+    return { type: AST.Literal, value: this.consume().value };
+  }
+
+  arrayDeclaration() {
+    const elements = [];
+    if (!this.peek("]")) {
+      do {
+        if (this.peek(']')) {
+          break; // Trailing coma case
+        }
+        elements.push(this.primary());
+      } while (this.expect(","));
+    }
+    this.consume("]");
+    return { type: AST.ArrayExpression, elements };
+  }
+
+  peek(e) {
+    if (this.tokens.length > 0) {
+      const text = this.tokens[0].text;
+      if (text === e || !e) {
+        return this.tokens[0];
+      }
+    }
+  }
+
+  expect(e) {
+    const token = this.peek(e);
+    if (token) {
+      return this.tokens.shift();
+    }
+  }
+
+  consume(e) {
+    const token = this.expect(e);
+    if (!token) {
+      throw "Unexpected! Expecting: " + e;
+    }
+    return token;
   }
 
   static Program = "Program";
   static Literal = "Literal";
+  static ArrayExpression = "ArrayExpression";
   static constants = {
     null: { type: AST.Literal, value: null },
     true: { type: AST.Literal, value: true },
@@ -234,6 +280,9 @@ class ASTCompiler {
         break;
       case AST.Literal:
         return this.escape(ast.value);
+      case AST.ArrayExpression:
+        const elements = ast.elements.map(element => this.recurse(element));
+        return "[" + elements.join(",") + "]";
     }
   }
 
