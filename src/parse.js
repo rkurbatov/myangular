@@ -22,12 +22,12 @@ class Lexer {
       this.ch = this.text.charAt(this.index);
       if (
         this.isNumber(this.ch) ||
-        (this.ch === "." && this.isNumber(this.peek()))
+        (this.is(".") && this.isNumber(this.peek()))
       ) {
         this.readNumber();
-      } else if (this.ch === "'" || this.ch === '"') {
+      } else if (this.is("'\"")) {
         this.readString(this.ch);
-      } else if (this.ch === "[" || this.ch === "]" || this.ch === ",") {
+      } else if (this.is("[],{}:")) {
         this.tokens.push({
           text: this.ch
         });
@@ -49,6 +49,10 @@ class Lexer {
     return this.index < this.text.length - 1
       ? this.text.charAt(this.index + 1)
       : false;
+  }
+
+  is(chs) {
+    return chs.includes(this.ch);
   }
 
   isNumber(ch) {
@@ -161,7 +165,7 @@ class Lexer {
       }
       this.index++;
     }
-    const token = { text: text };
+    const token = { text, identifier: true };
     this.tokens.push(token);
   }
 }
@@ -184,6 +188,8 @@ class AST {
   primary() {
     if (this.expect("[")) {
       return this.arrayDeclaration();
+    } else if (this.expect("{")) {
+      return this.object();
     } else if (AST.constants.hasOwnProperty(this.tokens[0].text)) {
       return AST.constants[this.consume().text];
     } else {
@@ -195,11 +201,15 @@ class AST {
     return { type: AST.Literal, value: this.consume().value };
   }
 
+  identifier() {
+    return { type: AST.identifier, name: this.consume().text };
+  }
+
   arrayDeclaration() {
     const elements = [];
     if (!this.peek("]")) {
       do {
-        if (this.peek(']')) {
+        if (this.peek("]")) {
           break; // Trailing coma case
         }
         elements.push(this.primary());
@@ -207,6 +217,23 @@ class AST {
     }
     this.consume("]");
     return { type: AST.ArrayExpression, elements };
+  }
+
+  object() {
+    const properties = [];
+    if (!this.peek("}")) {
+      do {
+        const property = { type: AST.Property };
+        property.key = this.peek().identifier
+          ? this.identifier()
+          : this.constant();
+        this.consume(":");
+        property.value = this.primary();
+        properties.push(property);
+      } while (this.expect(","));
+    }
+    this.consume("}");
+    return { type: AST.ObjectExpression, properties };
   }
 
   peek(e) {
@@ -236,6 +263,9 @@ class AST {
   static Program = "Program";
   static Literal = "Literal";
   static ArrayExpression = "ArrayExpression";
+  static ObjectExpression = "ObjectExpression";
+  static Property = "Property";
+  static Identifier = "Identifier";
   static constants = {
     null: { type: AST.Literal, value: null },
     true: { type: AST.Literal, value: true },
@@ -283,6 +313,16 @@ class ASTCompiler {
       case AST.ArrayExpression:
         const elements = ast.elements.map(element => this.recurse(element));
         return "[" + elements.join(",") + "]";
+      case AST.ObjectExpression:
+        const properties = ast.properties.map(property => {
+          const key =
+            property.key.type === AST.identifier
+              ? property.key.name
+              : this.escape(property.key.value);
+          const value = this.recurse(property.value);
+          return key + ":" + value;
+        });
+        return "{" + properties.join(",") + "}";
     }
   }
 
