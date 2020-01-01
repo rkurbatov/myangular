@@ -10,7 +10,7 @@ const ESCAPES = {
   '"': '"'
 };
 
-// Splits input string on tokens
+// Splits input string on tokens, returns array of such tokens
 class Lexer {
   lex(text) {
     this.text = text; // program text to parse
@@ -170,7 +170,7 @@ class Lexer {
   }
 }
 
-// Builds Abstract Syntax Tree out of tokens
+// Builds Abstract Syntax Tree out of array of tokens provided by lexer
 class AST {
   constructor(lexer) {
     this.lexer = lexer;
@@ -179,10 +179,6 @@ class AST {
   ast(text) {
     this.tokens = this.lexer.lex(text);
     return this.program();
-  }
-
-  program() {
-    return { type: AST.Program, body: this.primary() };
   }
 
   primary() {
@@ -197,12 +193,16 @@ class AST {
     }
   }
 
+  program() {
+    return { type: AST.Program, body: this.primary() };
+  }
+
   constant() {
     return { type: AST.Literal, value: this.consume().value };
   }
 
   identifier() {
-    return { type: AST.identifier, name: this.consume().text };
+    return { type: AST.Identifier, name: this.consume().text };
   }
 
   arrayDeclaration() {
@@ -273,20 +273,43 @@ class AST {
   };
 }
 
-// Compiles AST into Expression Function
+// Compiles AST into Expression Function that evaluates expression represented in tree
 class ASTCompiler {
   constructor(astBuilder) {
     this.astBuilder = astBuilder;
+    this.state = { body: [] };
   }
 
   compile(text) {
     const ast = this.astBuilder.ast(text);
-    this.state = { body: [] };
     this.recurse(ast);
     return new Function(this.state.body.join(""));
   }
 
-  escape(value) {
+  recurse(ast) {
+    switch (ast.type) {
+      case AST.Program:
+        this.state.body.push("return ", this.recurse(ast.body), ";");
+        break;
+      case AST.Literal:
+        return ASTCompiler.escape(ast.value);
+      case AST.ArrayExpression:
+        const elements = ast.elements.map(element => this.recurse(element));
+        return "[" + elements.join(",") + "]";
+      case AST.ObjectExpression:
+        const properties = ast.properties.map(property => {
+          const key =
+            property.key.type === AST.Identifier
+              ? property.key.name
+              : ASTCompiler.escape(property.key.value);
+          const value = this.recurse(property.value);
+          return key + ":" + value;
+        });
+        return "{" + properties.join(",") + "}";
+    }
+  }
+
+  static escape(value) {
     if (isString(value)) {
       return (
         "'" +
@@ -303,34 +326,12 @@ class ASTCompiler {
     }
   }
 
-  recurse(ast) {
-    switch (ast.type) {
-      case AST.Program:
-        this.state.body.push("return ", this.recurse(ast.body), ";");
-        break;
-      case AST.Literal:
-        return this.escape(ast.value);
-      case AST.ArrayExpression:
-        const elements = ast.elements.map(element => this.recurse(element));
-        return "[" + elements.join(",") + "]";
-      case AST.ObjectExpression:
-        const properties = ast.properties.map(property => {
-          const key =
-            property.key.type === AST.identifier
-              ? property.key.name
-              : this.escape(property.key.value);
-          const value = this.recurse(property.value);
-          return key + ":" + value;
-        });
-        return "{" + properties.join(",") + "}";
-    }
-  }
-
   static stringEscapeRegex = /[^ a-zA-Z0-9]/g;
   static stringEscapeFn = c =>
     "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4);
 }
 
+// Combines lexer, AST builder and compiler into single abstraction
 class Parser {
   constructor(lexer) {
     this.lexer = lexer;
