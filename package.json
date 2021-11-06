@@ -2,9 +2,9 @@
   "name": "my-own-angularjs",
   "version": "0.1.0",
   "devDependencies": {
-    "@babel/core": "^7.7.2",
-    "@babel/plugin-proposal-class-properties": "^7.7.0",
-    "@babel/preset-env": "^7.7.1",
+    "@babel/core": "^7.16.0",
+    "@babel/plugin-proposal-class-properties": "^7.16.0",
+    "@babel/preset-env": "^7.16.0",
     "babelify": "^10.0.0",
     "browserify": "^16.5.0",
     "jasmine-core": "^3.5.0",
@@ -15,17 +15,33 @@
     "karma-jasmine": "^2.0.1",
     "karma-jshint-preprocessor": "github:rkurbatov/karma-jshint-preprocessor",
     "karma-spec-reporter": "0.0.32",
-    "prettier": "^1.19.1",
+    "prettier": "^2.4.1",
     "puppeteer": "^2.0.0",
     "sinon": "^7.5.0",
     "watchify": "^3.11.1"
   },
   "scripts": {
     "lint": "jshint src test --reporter node_modules/jshint-stylish-ex/stylish.js",
-    "test": "karma start"
+    "test": "karma start",
+    "prettier:write": "prettier --write --no-editorconfig --config ./.prettierrc"
   },
   "dependencies": {
-    "jquery": "^3.4.1",
-    "lodash": "^4.17.15"
+    "jquery": "^3.6.0",
+    "lodash": "^4.17.21"
+  },
+  "lint-staged": {
+    "src/**/*.js": [
+      "npm run prettier:write",
+      "git add"
+    ],
+    "test/**/*.js": [
+      "npm run prettier:write",
+      "git add"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "yarn run lint-staged"
+    }
   }
 }
