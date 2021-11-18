@@ -21,7 +21,6 @@
     "watchify": "^3.11.1"
   },
   "scripts": {
-    "lint": "jshint src test --reporter node_modules/jshint-stylish-ex/stylish.js",
     "test": "karma start",
     "prettier:write": "prettier --write --no-editorconfig --config ./.prettierrc"
   },

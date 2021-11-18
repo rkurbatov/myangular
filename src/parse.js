@@ -188,6 +188,8 @@ class AST {
       return this.object()
     } else if (AST.constants.hasOwnProperty(this.tokens[0].text)) {
       return AST.constants[this.consume().text]
+    } else if (this.peek().identifier) {
+      return this.identifier()
     } else {
       return this.constant()
     }
@@ -283,7 +285,7 @@ class ASTCompiler {
   compile(text) {
     const ast = this.astBuilder.ast(text)
     this.recurse(ast)
-    return new Function(this.state.body.join(''))
+    return new Function('s', this.state.body.join(''))
   }
 
   recurse(ast) {
@@ -306,7 +308,18 @@ class ASTCompiler {
           return key + ':' + value
         })
         return '{' + properties.join(',') + '}'
+      case AST.Identifier:
+        this.state.body.push('var v0;')
+        this.if_(
+          's',
+          'v0=' + ASTCompiler.nonComputedMethod('s', ast.name) + ';',
+        )
+        return 'v0'
     }
+  }
+
+  if_(test, consequent) {
+    this.state.body.push('if(', test, '){', consequent, '}')
   }
 
   static escape(value) {
@@ -329,6 +342,8 @@ class ASTCompiler {
   static stringEscapeRegex = /[^ a-zA-Z0-9]/g
   static stringEscapeFn = (c) =>
     '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
+
+  static nonComputedMethod = (left, right) => '(' + left + ').' + right
 }
 
 // Combines lexer, AST builder and compiler into single abstraction

@@ -112,4 +112,13 @@ describe('parse', () => {
     const fn = parse('{a: 1, b: [2, 3], c: {d: 4}}')
     expect(fn()).toEqual({ a: 1, b: [2, 3], c: { d: 4 } })
   })
+
+  it('looks up an attribute from the scope', () => {
+    const fn = parse('aKey')
+    expect(fn({ aKey: 42 })).toBe(42)
+  })
+  it('returns undefined when looking up attribute from undefined', () => {
+    const fn = parse('aKey')
+    expect(fn()).toBeUndefined()
+  })
 })
