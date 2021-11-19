@@ -1,6 +1,6 @@
 import { range, times } from 'lodash'
 
-import Scope from '../src/scope'
+import { Scope } from '../src/scope'
 
 describe('Scope', () => {
   it('can be constructed and used as an object', () => {

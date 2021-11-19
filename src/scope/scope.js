@@ -12,7 +12,7 @@ import {
 // It is set as an initial watch value to distinct it from undefined
 const INIT_WATCH_VALUE = Symbol('initial watch value')
 
-class Scope {
+export class Scope {
   constructor() {
     this.$root = this // Makes root scope available to every child scope
     this.$$children = [] // Child scopes (will be shadowed for every new scope)
@@ -486,5 +486,3 @@ class Scope {
     }
   }
 }
-
-export default Scope
