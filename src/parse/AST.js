@@ -1,4 +1,22 @@
 // Builds Abstract Syntax Tree out of array of tokens provided by lexer
+// [
+//   { text: 'a', identifier: true },
+//   { text: '+' },
+//   { text: 'b', identifier: true },
+// ]
+// is turned into
+// {
+//   type: AST.BinaryExpression,
+//   operator: '+',
+//   left: {
+//     type: AST.Identifier,
+//     name: 'a',
+//   },
+//   right: {
+//     type: AST.Identifier,
+//     name: 'b',
+//   }
+// }
 export class AST {
   constructor(lexer) {
     this.lexer = lexer

@@ -9,6 +9,15 @@ const ESCAPES = {
 }
 
 // Splits input string on tokens, returns array of such tokens
+// For example
+// string 'a + b' is converted into
+// [
+//   { text: 'a', identifier: true },
+//   { text: '+' },
+//   { text: 'b', identifier: true },
+// ]
+//
+// Every token is an object of type { text: string, value: any, identifier: boolean }
 export class Lexer {
   lex(text) {
     this.text = text // program text to parse

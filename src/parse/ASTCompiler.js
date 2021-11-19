@@ -2,6 +2,29 @@ import { isNull, isString } from 'lodash'
 import { AST } from './AST'
 
 // Compiles AST into Expression Function that evaluates expression represented in tree
+// For example, the tree
+// [
+//   { text: 'a', identifier: true },
+//   { text: '+' },
+//   { text: 'b', identifier: true },
+// ]
+// is turned into
+// {
+//   type: AST.BinaryExpression,
+//   operator: '+',
+//   left: {
+//     type: AST.Identifier,
+//     name: 'a',
+//   },
+//   right: {
+//     type: AST.Identifier,
+//     name: 'b',
+//   }
+// }
+// is turned into a function
+// function (scope) {
+//   return scope.a + scope.b;
+// }
 export class ASTCompiler {
   constructor(astBuilder) {
     this.astBuilder = astBuilder
