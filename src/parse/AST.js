@@ -29,11 +29,11 @@ export class AST {
 
   #primary() {
     if (this.#expect('[')) {
-      return this.#arrayDeclaration()
+      return this.#array()
     } else if (this.#expect('{')) {
       return this.#object()
-    } else if (AST.#constants.hasOwnProperty(this.tokens[0].text)) {
-      return AST.#constants[this.#consume().text]
+    } else if (this.tokens[0].text in AST.#primitiveValues) {
+      return this.#primitiveValue()
     } else if (this.#peek().identifier) {
       return this.#identifier()
     } else {
@@ -53,7 +53,11 @@ export class AST {
     return { type: AST.Identifier, name: this.#consume().text }
   }
 
-  #arrayDeclaration() {
+  #primitiveValue() {
+    return AST.#primitiveValues[this.#consume().text]
+  }
+
+  #array() {
     const elements = []
     if (!this.#peek(']')) {
       do {
@@ -84,22 +88,23 @@ export class AST {
     return { type: AST.ObjectExpression, properties }
   }
 
-  #peek(e) {
+  #peek(element) {
     if (this.tokens.length > 0) {
-      const text = this.tokens[0].text
-      if (text === e || !e) {
-        return this.tokens[0]
+      const firstToken = this.tokens[0]
+      if (firstToken.text === element || !element) {
+        return firstToken
       }
     }
   }
 
+  // @TODO: rename to peekAndTake()
   #expect(e) {
-    const token = this.#peek(e)
-    if (token) {
+    if (this.#peek(e)) {
       return this.tokens.shift()
     }
   }
 
+  // @TODO: rename to expect()
   #consume(e) {
     const token = this.#expect(e)
     if (!token) {
@@ -115,7 +120,7 @@ export class AST {
   static Property = 'Property'
   static Identifier = 'Identifier'
 
-  static #constants = {
+  static #primitiveValues = {
     null: { type: AST.Literal, value: null },
     true: { type: AST.Literal, value: true },
     false: { type: AST.Literal, value: false },

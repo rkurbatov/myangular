@@ -42,11 +42,14 @@ export class ASTCompiler {
       case AST.Program:
         this.state.body.push('return ', this.#recurse(ast.body), ';')
         break
+
       case AST.Literal:
         return ASTCompiler.#escape(ast.value)
+
       case AST.ArrayExpression:
         const elements = ast.elements.map((element) => this.#recurse(element))
         return '[' + elements.join(',') + ']'
+
       case AST.ObjectExpression:
         const properties = ast.properties.map((property) => {
           const key =
@@ -57,6 +60,7 @@ export class ASTCompiler {
           return key + ':' + value
         })
         return '{' + properties.join(',') + '}'
+
       case AST.Identifier:
         this.state.body.push('var v0;')
         this.#if_(
