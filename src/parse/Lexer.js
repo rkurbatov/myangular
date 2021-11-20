@@ -28,20 +28,20 @@ export class Lexer {
     while (this.index < this.text.length) {
       this.ch = this.text.charAt(this.index)
       if (
-        this.isNumber(this.ch) ||
-        (this.is('.') && this.isNumber(this.peek()))
+        Lexer.#isNumber(this.ch) ||
+        (this.#is('.') && Lexer.#isNumber(this.#peek()))
       ) {
-        this.readNumber()
-      } else if (this.is('\'"')) {
-        this.readString(this.ch)
-      } else if (this.is('[],{}:')) {
+        this.#readNumber()
+      } else if (this.#is('\'"')) {
+        this.#readString(this.ch)
+      } else if (this.#is('[],{}:')) {
         this.tokens.push({
           text: this.ch,
         })
         this.index++
-      } else if (this.isIdent(this.ch)) {
-        this.readIdentifier()
-      } else if (this.isWhiteSpace(this.ch)) {
+      } else if (Lexer.#isIdentifier(this.ch)) {
+        this.#readIdentifier()
+      } else if (Lexer.#isWhiteSpace(this.ch)) {
         this.index++
       } else {
         throw 'Unexpected next character: ' + this.ch
@@ -52,25 +52,25 @@ export class Lexer {
   }
 
   // Peeks next symbol (if any)
-  peek() {
+  #peek() {
     return this.index < this.text.length - 1
       ? this.text.charAt(this.index + 1)
       : false
   }
 
-  is(chs) {
+  #is(chs) {
     return chs.includes(this.ch)
   }
 
-  isNumber(ch) {
+  static #isNumber(ch) {
     return '0' <= ch && ch <= '9'
   }
 
-  isExpOperator(ch) {
-    return ch === '-' || ch === '+' || this.isNumber(ch)
+  static #isExpOperator(ch) {
+    return ch === '-' || ch === '+' || Lexer.#isNumber(ch)
   }
 
-  isIdent(ch) {
+  static #isIdentifier(ch) {
     return (
       (ch >= 'a' && ch <= 'z') ||
       (ch >= 'A' && ch <= 'Z') ||
@@ -79,34 +79,34 @@ export class Lexer {
     )
   }
 
-  isWhiteSpace(ch) {
+  static #isWhiteSpace(ch) {
     return [' ', '\r', '\t', '\n', '\v', '\u00A0'].includes(ch)
   }
 
-  readNumber() {
+  #readNumber() {
     let number = ''
     while (this.index < this.text.length) {
       const ch = this.text.charAt(this.index).toLowerCase()
-      if (ch === '.' || this.isNumber(ch)) {
+      if (ch === '.' || Lexer.#isNumber(ch)) {
         number += ch
       } else {
-        const nextCh = this.peek()
+        const nextCh = this.#peek()
         const prevCh = number.charAt(number.length - 1)
-        if (ch === 'e' && this.isExpOperator(nextCh)) {
+        if (ch === 'e' && Lexer.#isExpOperator(nextCh)) {
           number += ch
         } else if (
-          this.isExpOperator(ch) &&
+          Lexer.#isExpOperator(ch) &&
           prevCh === 'e' &&
           nextCh &&
-          this.isNumber(nextCh)
+          Lexer.#isNumber(nextCh)
         ) {
           number += ch
         } else if (
-          this.isExpOperator(ch) &&
+          Lexer.#isExpOperator(ch) &&
           prevCh === 'e' &&
-          (!nextCh || !this.isNumber(ch))
+          (!nextCh || !Lexer.#isNumber(ch))
         ) {
-          throw 'Invlaid exponent!'
+          throw 'Invalid exponent!'
         } else {
           break
         }
@@ -120,7 +120,7 @@ export class Lexer {
   }
 
   // Takes quote symbol (either ' or ") as an input param
-  readString(quote) {
+  #readString(quote) {
     this.index++
     let string = ''
     let escape = false
@@ -161,11 +161,11 @@ export class Lexer {
     throw 'Unmatched quote'
   }
 
-  readIdentifier() {
+  #readIdentifier() {
     let text = ''
     while (this.index < this.text.length) {
       const ch = this.text.charAt(this.index)
-      if (this.isIdent(ch) || this.isNumber(ch)) {
+      if (Lexer.#isIdentifier(ch) || Lexer.#isNumber(ch)) {
         text += ch
       } else {
         break

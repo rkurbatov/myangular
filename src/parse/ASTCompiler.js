@@ -33,51 +33,51 @@ export class ASTCompiler {
 
   compile(text) {
     const ast = this.astBuilder.ast(text)
-    this.recurse(ast)
+    this.#recurse(ast)
     return new Function('s', this.state.body.join(''))
   }
 
-  recurse(ast) {
+  #recurse(ast) {
     switch (ast.type) {
       case AST.Program:
-        this.state.body.push('return ', this.recurse(ast.body), ';')
+        this.state.body.push('return ', this.#recurse(ast.body), ';')
         break
       case AST.Literal:
-        return ASTCompiler.escape(ast.value)
+        return ASTCompiler.#escape(ast.value)
       case AST.ArrayExpression:
-        const elements = ast.elements.map((element) => this.recurse(element))
+        const elements = ast.elements.map((element) => this.#recurse(element))
         return '[' + elements.join(',') + ']'
       case AST.ObjectExpression:
         const properties = ast.properties.map((property) => {
           const key =
             property.key.type === AST.Identifier
               ? property.key.name
-              : ASTCompiler.escape(property.key.value)
-          const value = this.recurse(property.value)
+              : ASTCompiler.#escape(property.key.value)
+          const value = this.#recurse(property.value)
           return key + ':' + value
         })
         return '{' + properties.join(',') + '}'
       case AST.Identifier:
         this.state.body.push('var v0;')
-        this.if_(
+        this.#if_(
           's',
-          'v0=' + ASTCompiler.nonComputedMethod('s', ast.name) + ';',
+          'v0=' + ASTCompiler.#nonComputedMethod('s', ast.name) + ';',
         )
         return 'v0'
     }
   }
 
-  if_(test, consequent) {
+  #if_(test, consequent) {
     this.state.body.push('if(', test, '){', consequent, '}')
   }
 
-  static escape(value) {
+  static #escape(value) {
     if (isString(value)) {
       return (
         "'" +
         value.replace(
-          ASTCompiler.stringEscapeRegex,
-          ASTCompiler.stringEscapeFn,
+          ASTCompiler.#stringEscapeRegex,
+          ASTCompiler.#stringEscapeFn,
         ) +
         "'"
       )
@@ -88,9 +88,9 @@ export class ASTCompiler {
     }
   }
 
-  static stringEscapeRegex = /[^ a-zA-Z0-9]/g
-  static stringEscapeFn = (c) =>
+  static #stringEscapeRegex = /[^ a-zA-Z0-9]/g
+  static #stringEscapeFn = (c) =>
     '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
 
-  static nonComputedMethod = (left, right) => '(' + left + ').' + right
+  static #nonComputedMethod = (left, right) => '(' + left + ').' + right
 }

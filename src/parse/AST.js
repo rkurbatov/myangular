@@ -24,67 +24,67 @@ export class AST {
 
   ast(text) {
     this.tokens = this.lexer.lex(text)
-    return this.program()
+    return this.#program()
   }
 
-  primary() {
-    if (this.expect('[')) {
-      return this.arrayDeclaration()
-    } else if (this.expect('{')) {
-      return this.object()
-    } else if (AST.constants.hasOwnProperty(this.tokens[0].text)) {
-      return AST.constants[this.consume().text]
-    } else if (this.peek().identifier) {
-      return this.identifier()
+  #primary() {
+    if (this.#expect('[')) {
+      return this.#arrayDeclaration()
+    } else if (this.#expect('{')) {
+      return this.#object()
+    } else if (AST.#constants.hasOwnProperty(this.tokens[0].text)) {
+      return AST.#constants[this.#consume().text]
+    } else if (this.#peek().identifier) {
+      return this.#identifier()
     } else {
-      return this.constant()
+      return this.#constant()
     }
   }
 
-  program() {
-    return { type: AST.Program, body: this.primary() }
+  #program() {
+    return { type: AST.Program, body: this.#primary() }
   }
 
-  constant() {
-    return { type: AST.Literal, value: this.consume().value }
+  #constant() {
+    return { type: AST.Literal, value: this.#consume().value }
   }
 
-  identifier() {
-    return { type: AST.Identifier, name: this.consume().text }
+  #identifier() {
+    return { type: AST.Identifier, name: this.#consume().text }
   }
 
-  arrayDeclaration() {
+  #arrayDeclaration() {
     const elements = []
-    if (!this.peek(']')) {
+    if (!this.#peek(']')) {
       do {
-        if (this.peek(']')) {
+        if (this.#peek(']')) {
           break // Trailing coma case
         }
-        elements.push(this.primary())
-      } while (this.expect(','))
+        elements.push(this.#primary())
+      } while (this.#expect(','))
     }
-    this.consume(']')
+    this.#consume(']')
     return { type: AST.ArrayExpression, elements }
   }
 
-  object() {
+  #object() {
     const properties = []
-    if (!this.peek('}')) {
+    if (!this.#peek('}')) {
       do {
         const property = { type: AST.Property }
-        property.key = this.peek().identifier
-          ? this.identifier()
-          : this.constant()
-        this.consume(':')
-        property.value = this.primary()
+        property.key = this.#peek().identifier
+          ? this.#identifier()
+          : this.#constant()
+        this.#consume(':')
+        property.value = this.#primary()
         properties.push(property)
-      } while (this.expect(','))
+      } while (this.#expect(','))
     }
-    this.consume('}')
+    this.#consume('}')
     return { type: AST.ObjectExpression, properties }
   }
 
-  peek(e) {
+  #peek(e) {
     if (this.tokens.length > 0) {
       const text = this.tokens[0].text
       if (text === e || !e) {
@@ -93,15 +93,15 @@ export class AST {
     }
   }
 
-  expect(e) {
-    const token = this.peek(e)
+  #expect(e) {
+    const token = this.#peek(e)
     if (token) {
       return this.tokens.shift()
     }
   }
 
-  consume(e) {
-    const token = this.expect(e)
+  #consume(e) {
+    const token = this.#expect(e)
     if (!token) {
       throw 'Unexpected! Expecting: ' + e
     }
@@ -114,7 +114,8 @@ export class AST {
   static ObjectExpression = 'ObjectExpression'
   static Property = 'Property'
   static Identifier = 'Identifier'
-  static constants = {
+
+  static #constants = {
     null: { type: AST.Literal, value: null },
     true: { type: AST.Literal, value: true },
     false: { type: AST.Literal, value: false },
