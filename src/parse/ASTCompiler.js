@@ -95,10 +95,19 @@ export class ASTCompiler {
       case AST.MemberExpression: {
         const intoId = this.#nextId()
         const left = this.#recurse(ast.object)
-        const assignment = ASTCompiler.#assign(
-          intoId,
-          ASTCompiler.#nonComputedMethod(left, ast.property.name),
-        )
+        let assignment
+        if (ast.computed) {
+          const right = this.#recurse(ast.property)
+          assignment = ASTCompiler.#assign(
+            intoId,
+            ASTCompiler.#computedMethod(left, right),
+          )
+        } else {
+          assignment = ASTCompiler.#assign(
+            intoId,
+            ASTCompiler.#nonComputedMethod(left, ast.property.name),
+          )
+        }
         this.#if_(left, assignment)
         return intoId
       }
@@ -157,4 +166,5 @@ export class ASTCompiler {
     '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
 
   static #nonComputedMethod = (left, right) => '(' + left + ').' + right
+  static #computedMethod = (left, right) => '(' + left + ')[' + right + ']'
 }

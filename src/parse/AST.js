@@ -40,13 +40,30 @@ export class AST {
     } else {
       primary = this.#constant()
     }
-    while (this.#expect('.')) {
-      primary = {
-        type: AST.MemberExpression,
-        object: primary,
-        property: this.#identifier(),
+
+    // Object property lookup both computed and non-computed
+    let next
+    while ((next = this.#expect('.', '['))) {
+      if (next.text === '[') {
+        // Computed expression (x[24], x['someField'], x[someField])
+        primary = {
+          type: AST.MemberExpression,
+          object: primary,
+          property: this.#primary(),
+          computed: true,
+        }
+        this.#consume(']')
+      } else {
+        // Non-computed expression (x.someField)
+        primary = {
+          type: AST.MemberExpression,
+          object: primary,
+          property: this.#identifier(),
+          computed: false,
+        }
       }
     }
+
     return primary
   }
 
@@ -97,18 +114,18 @@ export class AST {
     return { type: AST.ObjectExpression, properties }
   }
 
-  #peek(element) {
+  #peek(...elements) {
     if (this.tokens.length > 0) {
       const firstToken = this.tokens[0]
-      if (firstToken.text === element || !element) {
+      if (elements.includes(firstToken.text) || !elements.some(Boolean)) {
         return firstToken
       }
     }
   }
 
   // @TODO: rename to peekAndTake()
-  #expect(e) {
-    if (this.#peek(e)) {
+  #expect(...elements) {
+    if (this.#peek(...elements)) {
       return this.tokens.shift()
     }
   }

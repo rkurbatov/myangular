@@ -200,4 +200,23 @@ describe('parse', () => {
       expect(fn(scope, locals)).toBe(43)
     })
   })
+
+  describe('computed attribute lookup', () => {
+    it('parses a simple computed property access', () => {
+      const fn = parse('aKey["anotherKey"]')
+      expect(fn({ aKey: { anotherKey: 42 } })).toBe(42)
+    })
+    it('parses a computed numeric array access', () => {
+      const fn = parse('anArray[1]')
+      expect(fn({ anArray: [1, 2, 3] })).toBe(2)
+    })
+    it('parses a computed access with another key as property', () => {
+      const fn = parse('lock[key]')
+      expect(fn({ key: 'theKey', lock: { theKey: 42 } })).toBe(42)
+    })
+    it('parses computed access with another access as property', () => {
+      const fn = parse('lock[keys["aKey"]]')
+      expect(fn({ keys: { aKey: 'theKey' }, lock: { theKey: 42 } })).toBe(42)
+    })
+  })
 })
