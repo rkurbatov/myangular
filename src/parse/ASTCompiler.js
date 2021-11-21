@@ -83,6 +83,13 @@ export class ASTCompiler {
         )
         this.#if_(sCondition, sAssignment)
 
+        if (context) {
+          context.context =
+            ASTCompiler.#getHasOwnProperty('l', ast.name) + ' ? l : s'
+          context.name = ast.name
+          context.computed = false
+        }
+
         return intoId
       }
 

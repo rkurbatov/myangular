@@ -304,5 +304,24 @@ describe('parse', () => {
       const fn = parse('anObject.aFunction()')
       expect(fn(scope)).toBe(42)
     })
+    it('binds bare functions to the scope', () => {
+      const scope = {
+        aFunction: function () {
+          return this
+        },
+      }
+      const fn = parse('aFunction()')
+      expect(fn(scope)).toBe(scope)
+    })
+    it('binds bare functions on locals to the locals', () => {
+      const scope = {}
+      const locals = {
+        aFunction: function () {
+          return this
+        },
+      }
+      const fn = parse('aFunction()')
+      expect(fn(scope, locals)).toBe(locals)
+    })
   })
 })
