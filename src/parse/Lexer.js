@@ -23,7 +23,7 @@ export class Lexer {
         this.#readNumber()
       } else if (Lexer.#isOneOf('\'"', ch)) {
         this.#readString(ch)
-      } else if (Lexer.#isOneOf('[],{}:.()', ch)) {
+      } else if (Lexer.#isOneOf('[],{}:.()=', ch)) {
         this.#readSymbol(ch)
       } else if (Lexer.#isIdentifier(ch)) {
         this.#readIdentifier()

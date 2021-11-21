@@ -75,7 +75,7 @@ export class AST {
   }
 
   #program() {
-    return { type: AST.Program, body: this.#primary() }
+    return { type: AST.Program, body: this.#assignment() }
   }
 
   #constant() {
@@ -84,6 +84,19 @@ export class AST {
 
   #identifier() {
     return { type: AST.Identifier, name: this.#consume().text }
+  }
+
+  #assignment() {
+    const left = this.#primary()
+    if (this.#expect('=')) {
+      const right = this.#primary()
+      return {
+        type: AST.AssignmentExpression,
+        left,
+        right,
+      }
+    }
+    return left
   }
 
   #primitiveValue() {
@@ -97,7 +110,7 @@ export class AST {
         if (this.#peek(']')) {
           break // Trailing coma case
         }
-        elements.push(this.#primary())
+        elements.push(this.#assignment())
       } while (this.#expect(','))
     }
     this.#consume(']')
@@ -113,7 +126,7 @@ export class AST {
           ? this.#identifier()
           : this.#constant()
         this.#consume(':')
-        property.value = this.#primary()
+        property.value = this.#assignment()
         properties.push(property)
       } while (this.#expect(','))
     }
@@ -125,7 +138,7 @@ export class AST {
     const args = []
     if (!this.#peek(')')) {
       do {
-        args.push(this.#primary())
+        args.push(this.#assignment())
       } while (this.#expect(','))
     }
     return args
@@ -166,6 +179,7 @@ export class AST {
   static LocalsExpression = 'LocalsExpression'
   static MemberExpression = 'MemberExpression'
   static CallExpression = 'CallExpression'
+  static AssignmentExpression = 'AssignmentExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },

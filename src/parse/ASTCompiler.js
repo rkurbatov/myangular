@@ -42,7 +42,7 @@ export class ASTCompiler {
     return new Function('s', 'l', fnBody)
   }
 
-  #recurse(ast, context) {
+  #recurse(ast, context, create) {
     switch (ast.type) {
       case AST.Program:
         this.state.body.push('return ', this.#recurse(ast.body), ';')
@@ -69,19 +69,30 @@ export class ASTCompiler {
       case AST.Identifier: {
         const intoId = this.#nextId()
 
-        const lCondition = ASTCompiler.#getHasOwnProperty('l', ast.name)
+        const hasL = ASTCompiler.#getHasOwnProperty('l', ast.name)
         const lAssignment = ASTCompiler.#assign(
           intoId,
           ASTCompiler.#nonComputedMember('l', ast.name),
         )
-        this.#if_(lCondition, lAssignment)
+        this.#if_(hasL, lAssignment)
 
-        const sCondition = ASTCompiler.#not(lCondition) + ' && s'
+        if (create) {
+          const hasS = ASTCompiler.#getHasOwnProperty('s', ast.name)
+          const createCondition =
+            ASTCompiler.#not(hasL) + ' && s && ' + ASTCompiler.#not(hasS)
+          const createAssignment = ASTCompiler.#assign(
+            ASTCompiler.#nonComputedMember('s', ast.name),
+            '{}',
+          )
+          this.#if_(createCondition, createAssignment)
+        }
+
+        const notHasLAndHasS = ASTCompiler.#not(hasL) + ' && s'
         const sAssignment = ASTCompiler.#assign(
           intoId,
           ASTCompiler.#nonComputedMember('s', ast.name),
         )
-        this.#if_(sCondition, sAssignment)
+        this.#if_(notHasLAndHasS, sAssignment)
 
         if (context) {
           context.context =
@@ -101,13 +112,19 @@ export class ASTCompiler {
 
       case AST.MemberExpression: {
         const intoId = this.#nextId()
-        const left = this.#recurse(ast.object)
+        const left = this.#recurse(ast.object, undefined, create)
         if (context) {
           context.context = left
         }
         let assignment
         if (ast.computed) {
           const right = this.#recurse(ast.property)
+          if (create) {
+            const computed = ASTCompiler.#computedMember(left, right)
+            const createClause = ASTCompiler.#not(computed)
+            const createAssignment = ASTCompiler.#assign(computed, '{}')
+            this.#if_(createClause, createAssignment)
+          }
           assignment = ASTCompiler.#assign(
             intoId,
             ASTCompiler.#computedMember(left, right),
@@ -117,6 +134,15 @@ export class ASTCompiler {
             context.computed = true
           }
         } else {
+          if (create) {
+            const nonComputed = ASTCompiler.#nonComputedMember(
+              left,
+              ast.property.name,
+            )
+            const createClause = ASTCompiler.#not(nonComputed)
+            const createAssignment = ASTCompiler.#assign(nonComputed, '{}')
+            this.#if_(createClause, createAssignment)
+          }
           assignment = ASTCompiler.#assign(
             intoId,
             ASTCompiler.#nonComputedMember(left, ast.property.name),
@@ -148,6 +174,19 @@ export class ASTCompiler {
           }
         }
         return callee + ' && ' + callee + '(' + args.join(',') + ')'
+
+      case AST.AssignmentExpression: {
+        const leftContext = {}
+        this.#recurse(ast.left, leftContext, true) // Automatically create missing nested properties
+        const leftExpr = leftContext.computed
+          ? ASTCompiler.#computedMember(leftContext.context, leftContext.name)
+          : ASTCompiler.#nonComputedMember(
+              leftContext.context,
+              leftContext.name,
+            )
+
+        return ASTCompiler.#assign(leftExpr, this.#recurse(ast.right))
+      }
     }
   }
 
