@@ -38,7 +38,8 @@ export class ASTCompiler {
   compile(text) {
     const ast = this.astBuilder.ast(text)
     this.#recurse(ast)
-    return new Function('s', this.#varsDefinition() + this.state.body.join(''))
+    const fnBody = this.#varsDefinition() + this.state.body.join('')
+    return new Function('s', 'l', fnBody)
   }
 
   #recurse(ast) {
@@ -67,16 +68,29 @@ export class ASTCompiler {
 
       case AST.Identifier: {
         const intoId = this.#nextId()
-        const assignment = ASTCompiler.#assign(
+
+        const lCondition = ASTCompiler.#getHasOwnProperty('l', ast.name)
+        const lAssignment = ASTCompiler.#assign(
+          intoId,
+          ASTCompiler.#nonComputedMethod('l', ast.name),
+        )
+        this.#if_(lCondition, lAssignment)
+
+        const sCondition = ASTCompiler.#not(lCondition) + ' && s'
+        const sAssignment = ASTCompiler.#assign(
           intoId,
           ASTCompiler.#nonComputedMethod('s', ast.name),
         )
-        this.#if_('s', assignment)
+        this.#if_(sCondition, sAssignment)
+
         return intoId
       }
 
       case AST.ThisExpression:
         return 's'
+
+      case AST.LocalsExpression:
+        return 'l'
 
       case AST.MemberExpression: {
         const intoId = this.#nextId()
@@ -111,6 +125,10 @@ export class ASTCompiler {
     return id + '=' + value + ';'
   }
 
+  static #not(e) {
+    return '!(' + e + ')'
+  }
+
   static #escape(value) {
     if (isString(value)) {
       return (
@@ -126,6 +144,12 @@ export class ASTCompiler {
     } else {
       return value
     }
+  }
+
+  static #getHasOwnProperty(object, property) {
+    return (
+      object + ' && (' + ASTCompiler.#escape(property) + ' in ' + object + ')'
+    )
   }
 
   static #stringEscapeRegex = /[^ a-zA-Z0-9]/g

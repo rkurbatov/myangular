@@ -129,6 +129,7 @@ export class AST {
   static Property = 'Property'
   static Identifier = 'Identifier'
   static ThisExpression = 'ThisExpression'
+  static LocalsExpression = 'LocalsExpression'
   static MemberExpression = 'MemberExpression'
 
   static #primitiveValues = {
@@ -136,5 +137,6 @@ export class AST {
     true: { type: AST.Literal, value: true },
     false: { type: AST.Literal, value: false },
     this: { type: AST.ThisExpression },
+    $locals: { type: AST.LocalsExpression },
   }
 }
