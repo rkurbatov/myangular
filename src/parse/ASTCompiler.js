@@ -28,13 +28,17 @@ import { AST } from './AST'
 export class ASTCompiler {
   constructor(astBuilder) {
     this.astBuilder = astBuilder
-    this.state = { body: [] }
+    this.state = {
+      body: [], // elements of a generated evaluation function
+      nextId: 0, // basis of unique ids used by function
+      vars: [], // intermediate vars created for storing values
+    }
   }
 
   compile(text) {
     const ast = this.astBuilder.ast(text)
     this.#recurse(ast)
-    return new Function('s', this.state.body.join(''))
+    return new Function('s', this.#varsDefinition() + this.state.body.join(''))
   }
 
   #recurse(ast) {
@@ -62,17 +66,34 @@ export class ASTCompiler {
         return '{' + properties.join(',') + '}'
 
       case AST.Identifier:
-        this.state.body.push('var v0;')
-        this.#if_(
-          's',
-          'v0=' + ASTCompiler.#nonComputedMethod('s', ast.name) + ';',
+        const intoId = this.#nextId()
+        const assignment = ASTCompiler.#assign(
+          intoId,
+          ASTCompiler.#nonComputedMethod('s', ast.name),
         )
-        return 'v0'
+        this.#if_('s', assignment)
+        return intoId
     }
   }
 
   #if_(test, consequent) {
     this.state.body.push('if(', test, '){', consequent, '}')
+  }
+
+  #nextId() {
+    const id = 'v' + this.state.nextId++
+    this.state.vars.push(id)
+    return id
+  }
+
+  #varsDefinition() {
+    return this.state.vars.length
+      ? 'var ' + this.state.vars.join(',') + ';'
+      : ''
+  }
+
+  static #assign(id, value) {
+    return id + '=' + value + ';'
   }
 
   static #escape(value) {
