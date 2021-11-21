@@ -363,4 +363,128 @@ describe('parse', () => {
       expect(scope.some.nested.property.path).toBe(42)
     })
   })
+
+  describe('safety in member access', () => {
+    it('does not allow calling the function constructor', () => {
+      expect(() => {
+        const fn = parse('aFunction.constructor("return window;")()')
+        fn({
+          aFunction: () => {},
+        })
+      }).toThrow(
+        'Attempting to access a disallowed field in Angular expressions!',
+      )
+    })
+    it('does not allow accessing __proto__', () => {
+      expect(() => {
+        const fn = parse('obj.__proto__')
+        fn({ obj: {} })
+      }).toThrow(
+        'Attempting to access a disallowed field in Angular expressions!',
+      )
+    })
+    it('does not allow calling __defineGetter__', function () {
+      expect(function () {
+        var fn = parse('obj.__defineGetter__("evil", fn)')
+        fn({
+          obj: {},
+          fn: function () {},
+        })
+      }).toThrow(
+        'Attempting to access a disallowed field in Angular expressions!',
+      )
+    })
+    it('does not allow calling __defineSetter__', () => {
+      expect(() => {
+        const fn = parse('obj.__defineSetter__("evil", fn)')
+        fn({
+          obj: {},
+          fn: () => {},
+        })
+      }).toThrow(
+        'Attempting to access a disallowed field in Angular expressions!',
+      )
+    })
+    it('does not allow calling __lookupGetter__', () => {
+      expect(() => {
+        const fn = parse('obj.__lookupGetter__("evil")')
+        fn({ obj: {} })
+      }).toThrow(
+        'Attempting to access a disallowed field in Angular expressions!',
+      )
+    })
+    it('does not allow calling __lookupSetter__', () => {
+      expect(() => {
+        const fn = parse('obj.__lookupSetter__("evil")')
+        fn({ obj: {} })
+      }).toThrow(
+        'Attempting to access a disallowed field in Angular expressions!',
+      )
+    })
+    it('does not allow accessing window as computed property', () => {
+      const fn = parse('anObject["wnd"]')
+      expect(() => {
+        fn({ anObject: { wnd: window } })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow accessing window as non-computed property', () => {
+      const fn = parse('anObject.wnd')
+      expect(() => {
+        fn({ anObject: { wnd: window } })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow passing window as function argument', () => {
+      const fn = parse('aFunction(wnd)')
+      expect(() => {
+        fn({
+          aFunction: () => {},
+          wnd: window,
+        })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow calling methods on window', () => {
+      const fn = parse('wnd.scrollTo(0)')
+      expect(function () {
+        fn({ wnd: window })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow functions to return window', () => {
+      const fn = parse('getWnd()')
+      expect(() => {
+        fn({ getWnd: constant(window) })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow assigning window', () => {
+      const fn = parse('wnd = anObject')
+      expect(() => {
+        fn({ anObject: window })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow referencing window', () => {
+      const fn = parse('wnd')
+      expect(() => {
+        fn({ wnd: window })
+      }).toThrow('Referencing window in Angular expressions is disallowed!')
+    })
+    it('does not allow calling functions on DOM elements', () => {
+      const fn = parse('el.setAttribute("evil", "true")')
+      expect(() => {
+        fn({ el: document.documentElement })
+      }).toThrow('Referencing DOM nodes in Angular expressions is disallowed!')
+    })
+    it('does not allow calling the aliased function constructor', () => {
+      const fn = parse('fnConstructor("return window;")')
+      expect(() => {
+        fn({
+          fnConstructor: function () {}.constructor,
+        })
+      }).toThrow('Referencing Function in Angular expressions is disallowed!')
+    })
+    it('does not allow calling functions on Object', () => {
+      const fn = parse('obj.create({})')
+      expect(() => {
+        fn({ obj: Object })
+      }).toThrow('Referencing Object in Angular expressions is disallowed!')
+    })
+  })
 })

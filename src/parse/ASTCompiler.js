@@ -38,8 +38,15 @@ export class ASTCompiler {
   compile(text) {
     const ast = this.astBuilder.ast(text)
     this.#recurse(ast)
-    const fnBody = this.#varsDefinition() + this.state.body.join('')
-    return new Function('s', 'l', fnBody)
+    const fnBody = `
+      var fn=function(s,l){
+        ${this.#varsDefinition()} ${this.state.body.join('')}
+      };
+      return fn;`
+    return new Function('ensureSafeMemberName', 'ensureSafeObject', fnBody)(
+      ASTCompiler.#ensureSafeMemberName,
+      ASTCompiler.#ensureSafeObject,
+    )
   }
 
   #recurse(ast, context, create) {
@@ -67,6 +74,7 @@ export class ASTCompiler {
         return '{' + properties.join(',') + '}'
 
       case AST.Identifier: {
+        ASTCompiler.#ensureSafeMemberName(ast.name)
         const intoId = this.#nextId()
 
         const hasL = ASTCompiler.#getHasOwnProperty('l', ast.name)
@@ -101,6 +109,7 @@ export class ASTCompiler {
           context.computed = false
         }
 
+        this.#addEnsureSafeObject(intoId)
         return intoId
       }
 
@@ -119,6 +128,7 @@ export class ASTCompiler {
         let assignment
         if (ast.computed) {
           const right = this.#recurse(ast.property)
+          this.#addEnsureSafeMemberName(right)
           if (create) {
             const computed = ASTCompiler.#computedMember(left, right)
             const createClause = ASTCompiler.#not(computed)
@@ -127,13 +137,16 @@ export class ASTCompiler {
           }
           assignment = ASTCompiler.#assign(
             intoId,
-            ASTCompiler.#computedMember(left, right),
+            'ensureSafeObject(' +
+              ASTCompiler.#computedMember(left, right) +
+              ')',
           )
           if (context) {
             context.name = right
             context.computed = true
           }
         } else {
+          ASTCompiler.#ensureSafeMemberName(ast.property.name)
           if (create) {
             const nonComputed = ASTCompiler.#nonComputedMember(
               left,
@@ -145,7 +158,9 @@ export class ASTCompiler {
           }
           assignment = ASTCompiler.#assign(
             intoId,
-            ASTCompiler.#nonComputedMember(left, ast.property.name),
+            'ensureSafeObject(' +
+              ASTCompiler.#nonComputedMember(left, ast.property.name) +
+              ')',
           )
           if (context) {
             context.name = ast.property.name
@@ -159,8 +174,11 @@ export class ASTCompiler {
       case AST.CallExpression:
         const callContext = {}
         let callee = this.#recurse(ast.callee, callContext)
-        const args = ast.arguments.map((arg) => this.#recurse(arg))
+        const args = ast.arguments.map(
+          (arg) => 'ensureSafeObject(' + this.#recurse(arg) + ')',
+        )
         if (callContext.name) {
+          this.#addEnsureSafeObject(callContext.context)
           if (callContext.computed) {
             callee = ASTCompiler.#computedMember(
               callContext.context,
@@ -173,19 +191,23 @@ export class ASTCompiler {
             )
           }
         }
-        return callee + ' && ' + callee + '(' + args.join(',') + ')'
+        return (
+          callee +
+          ' && ensureSafeObject(' +
+          callee +
+          '(' +
+          args.join(',') +
+          '))'
+        )
 
       case AST.AssignmentExpression: {
-        const leftContext = {}
-        this.#recurse(ast.left, leftContext, true) // Automatically create missing nested properties
-        const leftExpr = leftContext.computed
-          ? ASTCompiler.#computedMember(leftContext.context, leftContext.name)
-          : ASTCompiler.#nonComputedMember(
-              leftContext.context,
-              leftContext.name,
-            )
-
-        return ASTCompiler.#assign(leftExpr, this.#recurse(ast.right))
+        const lftContext = {}
+        this.#recurse(ast.left, lftContext, true) // Automatically create missing nested properties
+        const leftExpr = lftContext.computed
+          ? ASTCompiler.#computedMember(lftContext.context, lftContext.name)
+          : ASTCompiler.#nonComputedMember(lftContext.context, lftContext.name)
+        const rightExpr = 'ensureSafeObject(' + this.#recurse(ast.right) + ')'
+        return ASTCompiler.#assign(leftExpr, rightExpr)
       }
     }
   }
@@ -243,4 +265,46 @@ export class ASTCompiler {
 
   static #nonComputedMember = (left, right) => '(' + left + ').' + right
   static #computedMember = (left, right) => '(' + left + ')[' + right + ']'
+
+  static #ensureSafeMemberName(name) {
+    if (
+      [
+        'constructor',
+        '__proto__',
+        '__defineGetter__',
+        '__defineSetter__',
+        '__lookupGetter__',
+        '__lookupSetter__',
+      ].includes(name)
+    ) {
+      throw 'Attempting to access a disallowed field in Angular expressions!'
+    }
+  }
+
+  static #ensureSafeObject(obj) {
+    if (obj) {
+      if (obj.window === obj) {
+        throw 'Referencing window in Angular expressions is disallowed!'
+      } else if (isDomNode(obj)) {
+        throw 'Referencing DOM nodes in Angular expressions is disallowed!'
+      } else if (obj.constructor === obj) {
+        throw 'Referencing Function in Angular expressions is disallowed!'
+      } else if (obj === Object) {
+        throw 'Referencing Object in Angular expressions is disallowed!'
+      }
+    }
+    return obj
+  }
+
+  #addEnsureSafeMemberName(expr) {
+    this.state.body.push('ensureSafeMemberName(' + expr + ');')
+  }
+
+  #addEnsureSafeObject(expr) {
+    this.state.body.push('ensureSafeObject(' + expr + ');')
+  }
+}
+
+function isDomNode(obj) {
+  return obj.children && (obj.nodeName || (obj.prop && obj.find && obj.attr))
 }
