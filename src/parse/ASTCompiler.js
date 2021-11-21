@@ -42,7 +42,7 @@ export class ASTCompiler {
     return new Function('s', 'l', fnBody)
   }
 
-  #recurse(ast) {
+  #recurse(ast, context) {
     switch (ast.type) {
       case AST.Program:
         this.state.body.push('return ', this.#recurse(ast.body), ';')
@@ -72,14 +72,14 @@ export class ASTCompiler {
         const lCondition = ASTCompiler.#getHasOwnProperty('l', ast.name)
         const lAssignment = ASTCompiler.#assign(
           intoId,
-          ASTCompiler.#nonComputedMethod('l', ast.name),
+          ASTCompiler.#nonComputedMember('l', ast.name),
         )
         this.#if_(lCondition, lAssignment)
 
         const sCondition = ASTCompiler.#not(lCondition) + ' && s'
         const sAssignment = ASTCompiler.#assign(
           intoId,
-          ASTCompiler.#nonComputedMethod('s', ast.name),
+          ASTCompiler.#nonComputedMember('s', ast.name),
         )
         this.#if_(sCondition, sAssignment)
 
@@ -95,22 +95,52 @@ export class ASTCompiler {
       case AST.MemberExpression: {
         const intoId = this.#nextId()
         const left = this.#recurse(ast.object)
+        if (context) {
+          context.context = left
+        }
         let assignment
         if (ast.computed) {
           const right = this.#recurse(ast.property)
           assignment = ASTCompiler.#assign(
             intoId,
-            ASTCompiler.#computedMethod(left, right),
+            ASTCompiler.#computedMember(left, right),
           )
+          if (context) {
+            context.name = right
+            context.computed = true
+          }
         } else {
           assignment = ASTCompiler.#assign(
             intoId,
-            ASTCompiler.#nonComputedMethod(left, ast.property.name),
+            ASTCompiler.#nonComputedMember(left, ast.property.name),
           )
+          if (context) {
+            context.name = ast.property.name
+            context.computed = false
+          }
         }
         this.#if_(left, assignment)
         return intoId
       }
+
+      case AST.CallExpression:
+        const callContext = {}
+        let callee = this.#recurse(ast.callee, callContext)
+        const args = ast.arguments.map((arg) => this.#recurse(arg))
+        if (callContext.name) {
+          if (callContext.computed) {
+            callee = ASTCompiler.#computedMember(
+              callContext.context,
+              callContext.name,
+            )
+          } else {
+            callee = ASTCompiler.#nonComputedMember(
+              callContext.context,
+              callContext.name,
+            )
+          }
+        }
+        return callee + ' && ' + callee + '(' + args.join(',') + ')'
     }
   }
 
@@ -165,6 +195,6 @@ export class ASTCompiler {
   static #stringEscapeFn = (c) =>
     '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
 
-  static #nonComputedMethod = (left, right) => '(' + left + ').' + right
-  static #computedMethod = (left, right) => '(' + left + ')[' + right + ']'
+  static #nonComputedMember = (left, right) => '(' + left + ').' + right
+  static #computedMember = (left, right) => '(' + left + ')[' + right + ']'
 }

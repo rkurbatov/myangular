@@ -1,3 +1,4 @@
+import { constant } from 'lodash'
 import { parse } from '../src/parse'
 
 describe('parse', () => {
@@ -217,6 +218,91 @@ describe('parse', () => {
     it('parses computed access with another access as property', () => {
       const fn = parse('lock[keys["aKey"]]')
       expect(fn({ keys: { aKey: 'theKey' }, lock: { theKey: 42 } })).toBe(42)
+    })
+  })
+
+  describe('function calls', () => {
+    it('parses a function call', () => {
+      const fn = parse('aFunction()')
+      expect(
+        fn({
+          aFunction: function () {
+            return 42
+          },
+        }),
+      ).toBe(42)
+      const fn2 = parse('anArrowFunction()')
+      expect(
+        fn2({
+          anArrowFunction: () => 43,
+        }),
+      ).toBe(43)
+    })
+    it('parses a function call with a single number argument', () => {
+      const fn = parse('aFunction(42)')
+      expect(
+        fn({
+          aFunction: function (n) {
+            return n
+          },
+        }),
+      ).toBe(42)
+    })
+    it('parses a function call with a single identifier argument', () => {
+      const fn = parse('aFunction(n)')
+      expect(
+        fn({
+          n: 42,
+          aFunction: function (arg) {
+            return arg
+          },
+        }),
+      ).toBe(42)
+    })
+    it('parses a function call with a single function call argument', () => {
+      const fn = parse('aFunction(argFn())')
+      expect(
+        fn({
+          argFn: constant(42),
+          aFunction: (arg) => arg,
+        }),
+      ).toBe(42)
+    })
+    it('parses a function call with multiple arguments', () => {
+      const fn = parse('aFunction(37, n, argFn())')
+      expect(
+        fn({
+          n: 3,
+          argFn: constant(2),
+          aFunction: function (a1, a2, a3) {
+            return a1 + a2 + a3
+          },
+        }),
+      ).toBe(42)
+    })
+    it('calls methods accessed as computed properties', () => {
+      const scope = {
+        anObject: {
+          aMember: 42,
+          aFunction: function () {
+            return this.aMember
+          },
+        },
+      }
+      const fn = parse('anObject["aFunction"]()')
+      expect(fn(scope)).toBe(42)
+    })
+    it('calls methods accessed as non-computed properties', () => {
+      const scope = {
+        anObject: {
+          aMember: 42,
+          aFunction: function () {
+            return this.aMember
+          },
+        },
+      }
+      const fn = parse('anObject.aFunction()')
+      expect(fn(scope)).toBe(42)
     })
   })
 })

@@ -41,9 +41,9 @@ export class AST {
       primary = this.#constant()
     }
 
-    // Object property lookup both computed and non-computed
+    // Object property lookup both computed and non-computed and function calls
     let next
-    while ((next = this.#expect('.', '['))) {
+    while ((next = this.#expect('.', '[', '('))) {
       if (next.text === '[') {
         // Computed expression (x[24], x['someField'], x[someField])
         primary = {
@@ -53,7 +53,7 @@ export class AST {
           computed: true,
         }
         this.#consume(']')
-      } else {
+      } else if (next.text === '.') {
         // Non-computed expression (x.someField)
         primary = {
           type: AST.MemberExpression,
@@ -61,6 +61,13 @@ export class AST {
           property: this.#identifier(),
           computed: false,
         }
+      } else if (next.text === '(') {
+        primary = {
+          type: AST.CallExpression,
+          callee: primary,
+          arguments: this.#parseArguments(),
+        }
+        this.#consume(')')
       }
     }
 
@@ -114,6 +121,16 @@ export class AST {
     return { type: AST.ObjectExpression, properties }
   }
 
+  #parseArguments() {
+    const args = []
+    if (!this.#peek(')')) {
+      do {
+        args.push(this.#primary())
+      } while (this.#expect(','))
+    }
+    return args
+  }
+
   #peek(...elements) {
     if (this.tokens.length > 0) {
       const firstToken = this.tokens[0]
@@ -148,6 +165,7 @@ export class AST {
   static ThisExpression = 'ThisExpression'
   static LocalsExpression = 'LocalsExpression'
   static MemberExpression = 'MemberExpression'
+  static CallExpression = 'CallExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },
