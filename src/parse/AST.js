@@ -28,17 +28,26 @@ export class AST {
   }
 
   #primary() {
+    let primary
     if (this.#expect('[')) {
-      return this.#array()
+      primary = this.#array()
     } else if (this.#expect('{')) {
-      return this.#object()
+      primary = this.#object()
     } else if (this.tokens[0].text in AST.#primitiveValues) {
-      return this.#primitiveValue()
+      primary = this.#primitiveValue()
     } else if (this.#peek().identifier) {
-      return this.#identifier()
+      primary = this.#identifier()
     } else {
-      return this.#constant()
+      primary = this.#constant()
     }
+    while (this.#expect('.')) {
+      primary = {
+        type: AST.MemberExpression,
+        object: primary,
+        property: this.#identifier(),
+      }
+    }
+    return primary
   }
 
   #program() {
@@ -119,10 +128,13 @@ export class AST {
   static ObjectExpression = 'ObjectExpression'
   static Property = 'Property'
   static Identifier = 'Identifier'
+  static ThisExpression = 'ThisExpression'
+  static MemberExpression = 'MemberExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },
     true: { type: AST.Literal, value: true },
     false: { type: AST.Literal, value: false },
+    this: { type: AST.ThisExpression },
   }
 }

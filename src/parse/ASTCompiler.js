@@ -65,7 +65,7 @@ export class ASTCompiler {
         })
         return '{' + properties.join(',') + '}'
 
-      case AST.Identifier:
+      case AST.Identifier: {
         const intoId = this.#nextId()
         const assignment = ASTCompiler.#assign(
           intoId,
@@ -73,6 +73,21 @@ export class ASTCompiler {
         )
         this.#if_('s', assignment)
         return intoId
+      }
+
+      case AST.ThisExpression:
+        return 's'
+
+      case AST.MemberExpression: {
+        const intoId = this.#nextId()
+        const left = this.#recurse(ast.object)
+        const assignment = ASTCompiler.#assign(
+          intoId,
+          ASTCompiler.#nonComputedMethod(left, ast.property.name),
+        )
+        this.#if_(left, assignment)
+        return intoId
+      }
     }
   }
 
