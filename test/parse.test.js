@@ -486,5 +486,17 @@ describe('parse', () => {
         fn({ obj: Object })
       }).toThrow('Referencing Object in Angular expressions is disallowed!')
     })
+    it('does not allow calling call', () => {
+      const fn = parse('fun.call(obj)')
+      expect(() => {
+        fn({ fun: function () {}, obj: {} })
+      }).toThrow()
+    })
+    it('does not allow calling apply', () => {
+      const fn = parse('fun.apply(obj)')
+      expect(() => {
+        fn({ fun: function () {}, obj: {} })
+      }).toThrow()
+    })
   })
 })

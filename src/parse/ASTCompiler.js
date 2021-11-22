@@ -43,9 +43,15 @@ export class ASTCompiler {
         ${this.#varsDefinition()} ${this.state.body.join('')}
       };
       return fn;`
-    return new Function('ensureSafeMemberName', 'ensureSafeObject', fnBody)(
+    return new Function(
+      'ensureSafeMemberName',
+      'ensureSafeObject',
+      'ensureSafeFunction',
+      fnBody,
+    )(
       ASTCompiler.#ensureSafeMemberName,
       ASTCompiler.#ensureSafeObject,
+      ASTCompiler.#ensureSafeFunction,
     )
   }
 
@@ -191,6 +197,7 @@ export class ASTCompiler {
             )
           }
         }
+        this.#addEnsureSafeFunction(callee)
         return (
           callee +
           ' && ensureSafeObject(' +
@@ -296,12 +303,32 @@ export class ASTCompiler {
     return obj
   }
 
+  static #ensureSafeFunction(obj) {
+    if (obj) {
+      if (obj.constructor === obj) {
+        throw 'Referencing Function in Angular expressions is disallowed!'
+      } else if (
+        [
+          Function.prototype.call,
+          Function.prototype.bind,
+          Function.prototype.apply,
+        ].includes(obj)
+      ) {
+        throw 'Referencing call, apply or bind in Angular expressions is disallowed'
+      }
+    }
+  }
+
   #addEnsureSafeMemberName(expr) {
     this.state.body.push('ensureSafeMemberName(' + expr + ');')
   }
 
   #addEnsureSafeObject(expr) {
     this.state.body.push('ensureSafeObject(' + expr + ');')
+  }
+
+  #addEnsureSafeFunction(expr) {
+    this.state.body.push('ensureSafeFunction(' + expr + ');')
   }
 }
 
