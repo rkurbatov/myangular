@@ -30,7 +30,12 @@ export class Lexer {
       } else if (Lexer.#isWhiteSpace(ch)) {
         this.#moveToNextChar()
       } else {
-        throw 'Unexpected next character: ' + ch
+        if (Lexer.#OPERATORS[ch]) {
+          this.tokens.push({ text: ch })
+          this.index++
+        } else {
+          throw 'Unexpected next character: ' + ch
+        }
       }
     }
 
@@ -88,9 +93,11 @@ export class Lexer {
   #readString(quote) {
     this.#moveToNextChar() // skip the quote symbol
     let string = ''
+    let rawString = quote // The string surrounded by quotes
     let escape = false
     while (this.index < this.text.length) {
       const ch = this.text.charAt(this.index)
+      rawString += ch
       // Parse escaped strings - either Unicode or standard ASCII escape-sequences
       if (escape) {
         if (ch === 'u') {
@@ -111,7 +118,7 @@ export class Lexer {
         escape = false
       } else if (ch === quote) {
         this.tokens.push({
-          text: string,
+          text: rawString,
           value: string,
         })
         this.#moveToNextChar()
@@ -185,5 +192,11 @@ export class Lexer {
     v: '\v',
     "'": "'",
     '"': '"',
+  }
+
+  static #OPERATORS = {
+    '+': true,
+    '!': true,
+    '-': true,
   }
 }

@@ -87,9 +87,9 @@ export class AST {
   }
 
   #assignment() {
-    const left = this.#primary()
+    const left = this.#unary()
     if (this.#expect('=')) {
-      const right = this.#primary()
+      const right = this.#unary()
       return {
         type: AST.AssignmentExpression,
         left,
@@ -132,6 +132,19 @@ export class AST {
     }
     this.#consume('}')
     return { type: AST.ObjectExpression, properties }
+  }
+
+  #unary() {
+    const token = this.#expect('+', '!', '-')
+    if (token) {
+      return {
+        type: AST.UnaryExpression,
+        operator: token.text,
+        argument: this.#unary(), // Let's parsing of several '!' operators in a row
+      }
+    } else {
+      return this.#primary()
+    }
   }
 
   #parseArguments() {
@@ -180,6 +193,7 @@ export class AST {
   static MemberExpression = 'MemberExpression'
   static CallExpression = 'CallExpression'
   static AssignmentExpression = 'AssignmentExpression'
+  static UnaryExpression = 'UnaryExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },

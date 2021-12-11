@@ -47,11 +47,13 @@ export class ASTCompiler {
       'ensureSafeMemberName',
       'ensureSafeObject',
       'ensureSafeFunction',
+      'ifDefined',
       fnBody,
     )(
       ASTCompiler.#ensureSafeMemberName,
       ASTCompiler.#ensureSafeObject,
       ASTCompiler.#ensureSafeFunction,
+      ASTCompiler.#ifDefined,
     )
   }
 
@@ -216,11 +218,24 @@ export class ASTCompiler {
         const rightExpr = 'ensureSafeObject(' + this.#recurse(ast.right) + ')'
         return ASTCompiler.#assign(leftExpr, rightExpr)
       }
+
+      case AST.UnaryExpression: {
+        return (
+          ast.operator +
+          '(' +
+          this.#ifDefined_(this.#recurse(ast.argument), 0) +
+          ')'
+        )
+      }
     }
   }
 
   #if_(test, consequent) {
     this.state.body.push('if(', test, '){', consequent, '}')
+  }
+
+  #ifDefined_(value, defaultValue) {
+    return 'ifDefined(' + value + ',' + ASTCompiler.#escape(defaultValue) + ')'
   }
 
   #nextId() {
@@ -317,6 +332,10 @@ export class ASTCompiler {
         throw 'Referencing call, apply or bind in Angular expressions is disallowed'
       }
     }
+  }
+
+  static #ifDefined(value, defaultValue) {
+    return typeof value === 'undefined' ? defaultValue : value
   }
 
   #addEnsureSafeMemberName(expr) {
