@@ -39,15 +39,46 @@ export class AST {
   // 6. Equality
   // 7. Assignment
   #assignment() {
-    const left = this.#equality()
+    const left = this.#logicalOr()
     if (this.#expect('=')) {
-      const right = this.#equality()
+      const right = this.#logicalOr()
       return {
         type: AST.AssignmentExpression,
         left,
         right,
       }
     }
+
+    return left
+  }
+
+  #logicalOr() {
+    let left = this.#logicalAnd()
+    let token
+    while ((token = this.#expect('||'))) {
+      left = {
+        type: AST.LogicalExpression,
+        left: left,
+        operator: token.text,
+        right: this.#logicalAnd(),
+      }
+    }
+
+    return left
+  }
+
+  #logicalAnd() {
+    let left = this.#equality()
+    let token
+    while ((token = this.#expect('&&'))) {
+      left = {
+        type: AST.LogicalExpression,
+        left: left,
+        operator: token.text,
+        right: this.#equality(),
+      }
+    }
+
     return left
   }
 
@@ -62,6 +93,7 @@ export class AST {
         right: this.#relational(),
       }
     }
+
     return left
   }
 
@@ -267,6 +299,7 @@ export class AST {
   static AssignmentExpression = 'AssignmentExpression'
   static UnaryExpression = 'UnaryExpression'
   static BinaryExpression = 'BinaryExpression'
+  static LogicalExpression = 'LogicalExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },

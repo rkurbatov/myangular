@@ -251,6 +251,18 @@ export class ASTCompiler {
           )
         }
       }
+
+      case AST.LogicalExpression: {
+        const intoId = this.#nextId()
+        this.state.body.push(
+          ASTCompiler.#assign(intoId, this.#recurse(ast.left)),
+        )
+        this.#if_(
+          ast.operator === '&&' ? intoId : ASTCompiler.#not(intoId),
+          ASTCompiler.#assign(intoId, this.#recurse(ast.right)),
+        )
+        return intoId
+      }
     }
   }
 
