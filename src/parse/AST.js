@@ -28,19 +28,34 @@ export class AST {
   }
 
   // Defines the precedence of operators:
-  // Assignment calls multiplicative that calls unary that calls primary.
+  // Assignment calls additive that calls multiplicative that calls unary that calls primary.
   // The precedence is opposite:
-  // 1. Primary, 2. Unary, 3. Multiplicative, 4. Assignment
+  // 1. Primary, 2. Unary, 3. Multiplicative, 4.Additive, 5. Assignment
   #assignment() {
-    const left = this.#multiplicative()
+    const left = this.#additive()
     if (this.#expect('=')) {
-      const right = this.#multiplicative()
+      const right = this.#additive()
       return {
         type: AST.AssignmentExpression,
         left,
         right,
       }
     }
+    return left
+  }
+
+  #additive() {
+    let left = this.#multiplicative()
+    let token
+    while ((token = this.#expect('+', '-'))) {
+      left = {
+        type: AST.BinaryExpression,
+        left: left,
+        operator: token.text,
+        right: this.#multiplicative(),
+      }
+    }
+
     return left
   }
 
