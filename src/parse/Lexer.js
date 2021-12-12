@@ -23,16 +23,24 @@ export class Lexer {
         this.#readNumber()
       } else if (Lexer.#isOneOf('\'"', ch)) {
         this.#readString(ch)
-      } else if (Lexer.#isOneOf('[],{}:.()=', ch)) {
+      } else if (Lexer.#isOneOf('[],{}:.()', ch)) {
         this.#readSymbol(ch)
       } else if (Lexer.#isIdentifier(ch)) {
         this.#readIdentifier()
       } else if (Lexer.#isWhiteSpace(ch)) {
         this.#moveToNextChar()
       } else {
-        if (Lexer.#OPERATORS[ch]) {
-          this.tokens.push({ text: ch })
-          this.index++
+        const ch2 = ch + this.#peekNextChar()
+        const ch3 = ch2 + this.#peekNextChar(2)
+        // 1, 2 or 3-symbol operators
+        const op = Lexer.#OPERATORS[ch]
+        const op2 = Lexer.#OPERATORS[ch2]
+        const op3 = Lexer.#OPERATORS[ch3]
+
+        if (op || op2 || op3) {
+          const token = op3 ? ch3 : op2 ? ch2 : ch
+          this.tokens.push({ text: token })
+          this.#moveToNextChar(token.length)
         } else {
           throw 'Unexpected next character: ' + ch
         }
@@ -42,9 +50,9 @@ export class Lexer {
     return this.tokens
   }
 
-  #peekNextChar() {
-    return this.index < this.text.length - 1
-      ? this.text.charAt(this.index + 1)
+  #peekNextChar(n = 1) {
+    return this.index + n < this.text.length
+      ? this.text.charAt(this.index + n)
       : false
   }
 
@@ -195,11 +203,20 @@ export class Lexer {
   }
 
   static #OPERATORS = {
-    '+': true,
-    '!': true,
-    '-': true,
+    '+': true, // Unary and binary plus
+    '!': true, // Unary negation
+    '-': true, // Unary and binary minus
     '*': true,
     '/': true,
     '%': true,
+    '=': true, // Assignment
+    '==': true,
+    '!=': true,
+    '===': true,
+    '!==': true,
+    '<': true,
+    '>': true,
+    '<=': true,
+    '>=': true,
   }
 }
