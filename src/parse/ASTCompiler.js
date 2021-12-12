@@ -227,6 +227,18 @@ export class ASTCompiler {
           ')'
         )
       }
+
+      case AST.BinaryExpression: {
+        return (
+          '(' +
+          this.#recurse(ast.left) +
+          ')' +
+          ast.operator +
+          '(' +
+          this.#recurse(ast.right) +
+          ')'
+        )
+      }
     }
   }
 

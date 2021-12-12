@@ -198,5 +198,8 @@ export class Lexer {
     '+': true,
     '!': true,
     '-': true,
+    '*': true,
+    '/': true,
+    '%': true,
   }
 }

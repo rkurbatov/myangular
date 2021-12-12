@@ -27,6 +27,53 @@ export class AST {
     return this.#program()
   }
 
+  // Defines the precedence of operators:
+  // Assignment calls multiplicative that calls unary that calls primary.
+  // The precedence is opposite:
+  // 1. Primary, 2. Unary, 3. Multiplicative, 4. Assignment
+  #assignment() {
+    const left = this.#multiplicative()
+    if (this.#expect('=')) {
+      const right = this.#multiplicative()
+      return {
+        type: AST.AssignmentExpression,
+        left,
+        right,
+      }
+    }
+    return left
+  }
+
+  #multiplicative() {
+    let left = this.#unary()
+    let token
+
+    // Fallbacks to the unary in the worst case
+    while ((token = this.#expect('*', '/', '%'))) {
+      left = {
+        type: AST.BinaryExpression,
+        left: left,
+        operator: token.text,
+        right: this.#unary(),
+      }
+    }
+
+    return left
+  }
+
+  #unary() {
+    const token = this.#expect('+', '!', '-')
+    if (token) {
+      return {
+        type: AST.UnaryExpression,
+        operator: token.text,
+        argument: this.#unary(), // Lets parsing of several '!' operators in a row
+      }
+    } else {
+      return this.#primary() // Fallback to primary
+    }
+  }
+
   #primary() {
     let primary
     if (this.#expect('[')) {
@@ -86,19 +133,6 @@ export class AST {
     return { type: AST.Identifier, name: this.#consume().text }
   }
 
-  #assignment() {
-    const left = this.#unary()
-    if (this.#expect('=')) {
-      const right = this.#unary()
-      return {
-        type: AST.AssignmentExpression,
-        left,
-        right,
-      }
-    }
-    return left
-  }
-
   #primitiveValue() {
     return AST.#primitiveValues[this.#consume().text]
   }
@@ -132,19 +166,6 @@ export class AST {
     }
     this.#consume('}')
     return { type: AST.ObjectExpression, properties }
-  }
-
-  #unary() {
-    const token = this.#expect('+', '!', '-')
-    if (token) {
-      return {
-        type: AST.UnaryExpression,
-        operator: token.text,
-        argument: this.#unary(), // Let's parsing of several '!' operators in a row
-      }
-    } else {
-      return this.#primary()
-    }
   }
 
   #parseArguments() {
@@ -194,6 +215,7 @@ export class AST {
   static CallExpression = 'CallExpression'
   static AssignmentExpression = 'AssignmentExpression'
   static UnaryExpression = 'UnaryExpression'
+  static BinaryExpression = 'BinaryExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },
