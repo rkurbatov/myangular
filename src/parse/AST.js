@@ -28,20 +28,24 @@ export class AST {
   }
 
   // Defines the precedence of operators:
-  // Assignment calls equality() that calls relational() that calls additive()
-  // that calls multiplicative() that calls unary() that calls primary().
+  // Assignment calls ternary() that call logicalOr() that calls logicalAnd()
+  // that calls relational() that calls additive() that calls multiplicative()
+  // that calls unary() that calls primary().
   // The precedence is opposite:
   // 1. Primary
   // 2. Unary
   // 3. Multiplicative
-  // 4.Additive
+  // 4. Additive
   // 5. Relational
   // 6. Equality
-  // 7. Assignment
+  // 7. Logical AND
+  // 8. Logical OR
+  // 9. Ternary
+  // 10. Assignment
   #assignment() {
-    const left = this.#logicalOr()
+    const left = this.#ternary()
     if (this.#expect('=')) {
-      const right = this.#logicalOr()
+      const right = this.#ternary()
       return {
         type: AST.AssignmentExpression,
         left,
@@ -52,13 +56,31 @@ export class AST {
     return left
   }
 
+  #ternary() {
+    const test = this.#logicalOr()
+    if (this.#expect('?')) {
+      const consequent = this.#assignment()
+      if (this.#consume(':')) {
+        const alternate = this.#assignment()
+        return {
+          type: AST.ConditionalExpression,
+          test,
+          consequent,
+          alternate,
+        }
+      }
+    }
+
+    return test
+  }
+
   #logicalOr() {
     let left = this.#logicalAnd()
     let token
     while ((token = this.#expect('||'))) {
       left = {
         type: AST.LogicalExpression,
-        left: left,
+        left,
         operator: token.text,
         right: this.#logicalAnd(),
       }
@@ -73,7 +95,7 @@ export class AST {
     while ((token = this.#expect('&&'))) {
       left = {
         type: AST.LogicalExpression,
-        left: left,
+        left,
         operator: token.text,
         right: this.#equality(),
       }
@@ -88,7 +110,7 @@ export class AST {
     while ((token = this.#expect('==', '===', '!=', '!=='))) {
       left = {
         type: AST.BinaryExpression,
-        left: left,
+        left,
         operator: token.text,
         right: this.#relational(),
       }
@@ -103,7 +125,7 @@ export class AST {
     while ((token = this.#expect('>', '<', '>=', '<='))) {
       left = {
         type: AST.BinaryExpression,
-        left: left,
+        left,
         operator: token.text,
         right: this.#additive(),
       }
@@ -118,7 +140,7 @@ export class AST {
     while ((token = this.#expect('+', '-'))) {
       left = {
         type: AST.BinaryExpression,
-        left: left,
+        left,
         operator: token.text,
         right: this.#multiplicative(),
       }
@@ -135,7 +157,7 @@ export class AST {
     while ((token = this.#expect('*', '/', '%'))) {
       left = {
         type: AST.BinaryExpression,
-        left: left,
+        left,
         operator: token.text,
         right: this.#unary(),
       }
@@ -300,6 +322,7 @@ export class AST {
   static UnaryExpression = 'UnaryExpression'
   static BinaryExpression = 'BinaryExpression'
   static LogicalExpression = 'LogicalExpression'
+  static ConditionalExpression = 'ConditionalExpression'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },

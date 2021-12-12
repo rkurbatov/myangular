@@ -263,6 +263,23 @@ export class ASTCompiler {
         )
         return intoId
       }
+
+      case AST.ConditionalExpression: {
+        const intoId = this.#nextId()
+        const testId = this.#nextId()
+        this.state.body.push(
+          ASTCompiler.#assign(testId, this.#recurse(ast.test)),
+        )
+        this.#if_(
+          testId,
+          ASTCompiler.#assign(intoId, this.#recurse(ast.consequent)),
+        )
+        this.#if_(
+          ASTCompiler.#not(testId),
+          ASTCompiler.#assign(intoId, this.#recurse(ast.alternate)),
+        )
+        return intoId
+      }
     }
   }
 
