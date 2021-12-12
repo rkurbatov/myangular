@@ -647,4 +647,20 @@ describe('parse', () => {
       ).toEqual('c')
     })
   })
+  describe('precedence and statements', () => {
+    it('parses parentheses altering precedence order', () => {
+      expect(parse('21 * (3 - 1)')()).toBe(42)
+      expect(parse('false && (true || true)')()).toBe(false)
+      expect(parse('-((a % 2) === 0 ? 1 : 2)')({ a: 42 })).toBe(-1)
+    })
+    it('parses several statements', () => {
+      const fn = parse('a = 1; b = 2; c = 3')
+      const scope = {}
+      fn(scope)
+      expect(scope).toEqual({ a: 1, b: 2, c: 3 })
+    })
+    it('returns the value of the last statement', () => {
+      expect(parse('a = 1; b = 2; a + b')({})).toBe(3)
+    })
+  })
 })

@@ -27,6 +27,18 @@ export class AST {
     return this.#program()
   }
 
+  #program() {
+    const body = []
+    while (true) {
+      if (this.tokens.length) {
+        body.push(this.#assignment())
+      }
+      if (!this.#expect(';')) {
+        return { type: AST.Program, body }
+      }
+    }
+  }
+
   // Defines the precedence of operators:
   // Assignment calls ternary() that call logicalOr() that calls logicalAnd()
   // that calls relational() that calls additive() that calls multiplicative()
@@ -181,7 +193,11 @@ export class AST {
 
   #primary() {
     let primary
-    if (this.#expect('[')) {
+    if (this.#expect('(')) {
+      // Start new precedence chain for parentheses
+      primary = this.#assignment()
+      this.#consume(')')
+    } else if (this.#expect('[')) {
       primary = this.#array()
     } else if (this.#expect('{')) {
       primary = this.#object()
@@ -224,10 +240,6 @@ export class AST {
     }
 
     return primary
-  }
-
-  #program() {
-    return { type: AST.Program, body: this.#assignment() }
   }
 
   #constant() {

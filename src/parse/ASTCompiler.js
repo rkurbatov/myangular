@@ -1,4 +1,4 @@
-import { isNull, isString } from 'lodash'
+import { isNull, isString, initial, last } from 'lodash'
 import { AST } from './AST'
 
 // Compiles AST into Expression Function that evaluates expression represented in tree
@@ -59,9 +59,13 @@ export class ASTCompiler {
 
   #recurse(ast, context, create) {
     switch (ast.type) {
-      case AST.Program:
-        this.state.body.push('return ', this.#recurse(ast.body), ';')
+      case AST.Program: {
+        initial(ast.body).forEach((stmt) => {
+          this.state.body.push(this.#recurse(stmt), ';')
+        })
+        this.state.body.push('return ', this.#recurse(last(ast.body)), ';')
         break
+      }
 
       case AST.Literal:
         return ASTCompiler.#escape(ast.value)
