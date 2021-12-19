@@ -1,5 +1,6 @@
-import { constant } from 'lodash'
+import { constant, repeat } from 'lodash'
 import { parse } from '../src/parse'
+import { register } from '../src/filter'
 
 describe('parse', () => {
   describe('numbers', () => {
@@ -661,6 +662,34 @@ describe('parse', () => {
     })
     it('returns the value of the last statement', () => {
       expect(parse('a = 1; b = 2; a + b')({})).toBe(3)
+    })
+  })
+
+  describe('filters', () => {
+    it('can parse filter expressions', () => {
+      register('upcase', () => (str) => str.toUpperCase())
+
+      const fn = parse('aString | upcase')
+      expect(fn({ aString: 'Hello' })).toEqual('HELLO')
+    })
+    it('can parse filter chain expressions', () => {
+      register('upcase', () => (s) => s.toUpperCase())
+      register('exclamate', () => (s) => s + '!')
+
+      const fn = parse('"hello" | upcase | exclamate')
+      expect(fn()).toEqual('HELLO!')
+    })
+    it('can pass an additional argument to filters', () => {
+      register('repeat', () => (s, times) => repeat(s, times))
+
+      const fn = parse('"hello" | repeat:3')
+      expect(fn()).toEqual('hellohellohello')
+    })
+    it('can pass several additional arguments to filters', () => {
+      register('surround', () => (s, left, right) => left + s + right)
+
+      const fn = parse('"hello" | surround:"*":"!"')
+      expect(fn()).toEqual('*hello!')
     })
   })
 })

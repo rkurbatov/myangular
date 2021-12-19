@@ -1,5 +1,6 @@
-import { isNull, isString, initial, last } from 'lodash'
+import { isNull, isString, initial, last, isEmpty } from 'lodash'
 import { AST } from './AST'
+import { filter } from '../filter'
 
 // Compiles AST into Expression Function that evaluates expression represented in tree
 // For example, the tree
@@ -32,6 +33,7 @@ export class ASTCompiler {
       body: [], // elements of a generated evaluation function
       nextId: 0, // basis of unique ids used by function
       vars: [], // intermediate vars created for storing values
+      filters: {}, // list of registered filters used in expression
     }
   }
 
@@ -39,6 +41,7 @@ export class ASTCompiler {
     const ast = this.astBuilder.ast(text)
     this.#recurse(ast)
     const fnBody = `
+      ${this.#filterPrefix()}
       var fn=function(s,l){
         ${this.#varsDefinition()} ${this.state.body.join('')}
       };
@@ -48,12 +51,14 @@ export class ASTCompiler {
       'ensureSafeObject',
       'ensureSafeFunction',
       'ifDefined',
+      'filter',
       fnBody,
     )(
       ASTCompiler.#ensureSafeMemberName,
       ASTCompiler.#ensureSafeObject,
       ASTCompiler.#ensureSafeFunction,
       ASTCompiler.#ifDefined,
+      filter,
     )
   }
 
@@ -183,35 +188,42 @@ export class ASTCompiler {
         return intoId
       }
 
-      case AST.CallExpression:
-        const callContext = {}
-        let callee = this.#recurse(ast.callee, callContext)
-        const args = ast.arguments.map(
-          (arg) => 'ensureSafeObject(' + this.#recurse(arg) + ')',
-        )
-        if (callContext.name) {
-          this.#addEnsureSafeObject(callContext.context)
-          if (callContext.computed) {
-            callee = ASTCompiler.#computedMember(
-              callContext.context,
-              callContext.name,
-            )
-          } else {
-            callee = ASTCompiler.#nonComputedMember(
-              callContext.context,
-              callContext.name,
-            )
+      case AST.CallExpression: {
+        if (ast.filter) {
+          const callee = this.#filter(ast.callee.name)
+          const args = ast.arguments.map((arg) => this.#recurse(arg))
+          return callee + '(' + args + ')'
+        } else {
+          const callContext = {}
+          let callee = this.#recurse(ast.callee, callContext)
+          const args = ast.arguments.map(
+            (arg) => 'ensureSafeObject(' + this.#recurse(arg) + ')',
+          )
+          if (callContext.name) {
+            this.#addEnsureSafeObject(callContext.context)
+            if (callContext.computed) {
+              callee = ASTCompiler.#computedMember(
+                callContext.context,
+                callContext.name,
+              )
+            } else {
+              callee = ASTCompiler.#nonComputedMember(
+                callContext.context,
+                callContext.name,
+              )
+            }
           }
+          this.#addEnsureSafeFunction(callee)
+          return (
+            callee +
+            ' && ensureSafeObject(' +
+            callee +
+            '(' +
+            args.join(',') +
+            '))'
+          )
         }
-        this.#addEnsureSafeFunction(callee)
-        return (
-          callee +
-          ' && ensureSafeObject(' +
-          callee +
-          '(' +
-          args.join(',') +
-          '))'
-        )
+      }
 
       case AST.AssignmentExpression: {
         const lftContext = {}
@@ -295,9 +307,9 @@ export class ASTCompiler {
     return 'ifDefined(' + value + ',' + ASTCompiler.#escape(defaultValue) + ')'
   }
 
-  #nextId() {
+  #nextId(skip) {
     const id = 'v' + this.state.nextId++
-    this.state.vars.push(id)
+    if (!skip) this.state.vars.push(id)
     return id
   }
 
@@ -305,6 +317,28 @@ export class ASTCompiler {
     return this.state.vars.length
       ? 'var ' + this.state.vars.join(',') + ';'
       : ''
+  }
+
+  #filter(name) {
+    if (!this.state.filters.hasOwnProperty(name)) {
+      // reuse already existing name
+      this.state.filters[name] = this.#nextId(true)
+    }
+    return this.state.filters[name]
+  }
+
+  #filterPrefix() {
+    if (isEmpty(this.state.filters)) {
+      return '' // No filters used, don't apply prefix
+    } else {
+      const parts = []
+      for (const [filterName, varName] of Object.entries(this.state.filters)) {
+        parts.push(
+          varName + ' = filter(' + ASTCompiler.#escape(filterName) + ')',
+        )
+      }
+      return 'var ' + parts.join(',') + ';'
+    }
   }
 
   static #assign(id, value) {

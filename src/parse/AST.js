@@ -31,7 +31,7 @@ export class AST {
     const body = []
     while (true) {
       if (this.tokens.length) {
-        body.push(this.#assignment())
+        body.push(this.#filter())
       }
       if (!this.#expect(';')) {
         return { type: AST.Program, body }
@@ -40,7 +40,7 @@ export class AST {
   }
 
   // Defines the precedence of operators:
-  // Assignment calls ternary() that call logicalOr() that calls logicalAnd()
+  // filter() calls assignment() that calls ternary() that call logicalOr() that calls logicalAnd()
   // that calls relational() that calls additive() that calls multiplicative()
   // that calls unary() that calls primary().
   // The precedence is opposite:
@@ -54,6 +54,26 @@ export class AST {
   // 8. Logical OR
   // 9. Ternary
   // 10. Assignment
+  // 11. Filter
+  #filter() {
+    let left = this.#assignment()
+    while (this.#expect('|')) {
+      const args = [left]
+      left = {
+        type: AST.CallExpression,
+        callee: this.#identifier(),
+        arguments: args,
+        filter: true, // Unlike normal functions filters are not in the scope
+      }
+      // Parse filter params
+      while (this.#expect(':')) {
+        args.push(this.#assignment())
+      }
+    }
+
+    return left
+  }
+
   #assignment() {
     const left = this.#ternary()
     if (this.#expect('=')) {
@@ -195,7 +215,7 @@ export class AST {
     let primary
     if (this.#expect('(')) {
       // Start new precedence chain for parentheses
-      primary = this.#assignment()
+      primary = this.#filter()
       this.#consume(')')
     } else if (this.#expect('[')) {
       primary = this.#array()
