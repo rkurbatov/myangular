@@ -109,4 +109,178 @@ describe('filter filter', () => {
     const fn = parse('arr | filter:"!o"')
     expect(fn({ arr: ['quick', 'brown', 'fox'] })).toEqual(['quick'])
   })
+  it('must match all criteria in an object', () => {
+    const fn = parse('arr | filter:{name: "o", role: "m"}')
+    expect(
+      fn({
+        arr: [
+          { name: 'Joe', role: 'admin' },
+          { name: 'Jane', role: 'moderator' },
+        ],
+      }),
+    ).toEqual([{ name: 'Joe', role: 'admin' }])
+  })
+  it('matches everything when filtered with an empty object', () => {
+    const fn = parse('arr | filter:{}')
+    expect(
+      fn({
+        arr: [
+          { name: 'Joe', role: 'admin' },
+          { name: 'Jane', role: 'moderator' },
+        ],
+      }),
+    ).toEqual([
+      { name: 'Joe', role: 'admin' },
+      { name: 'Jane', role: 'moderator' },
+    ])
+  })
+  it('filters with a nested object', () => {
+    const fn = parse('arr | filter:{name: {first: "o"}}')
+    expect(
+      fn({
+        arr: [
+          { name: { first: 'Joe' }, role: 'admin' },
+          { name: { first: 'Jane' }, role: 'moderator' },
+        ],
+      }),
+    ).toEqual([{ name: { first: 'Joe' }, role: 'admin' }])
+  })
+  it('allows negation when filtering with an object', () => {
+    const fn = parse('arr | filter:{name: {first: "!o"}}')
+    expect(
+      fn({
+        arr: [
+          { name: { first: 'Joe' }, role: 'admin' },
+          { name: { first: 'Jane' }, role: 'moderator' },
+        ],
+      }),
+    ).toEqual([{ name: { first: 'Jane' }, role: 'moderator' }])
+  })
+  it('ignores undefined values in expectation object', () => {
+    const fn = parse('arr | filter:{name: thisIsUndefined}')
+    expect(
+      fn({
+        arr: [
+          { name: 'Joe', role: 'admin' },
+          { name: 'Jane', role: 'moderator' },
+        ],
+      }),
+    ).toEqual([
+      { name: 'Joe', role: 'admin' },
+      { name: 'Jane', role: 'moderator' },
+    ])
+  })
+  it('filters with a nested object in array', () => {
+    const fn = parse('arr | filter:{users: {name: {first: "o"}}}')
+    expect(
+      fn({
+        arr: [
+          {
+            users: [
+              { name: { first: 'Joe' }, role: 'admin' },
+              { name: { first: 'Jane' }, role: 'moderator' },
+            ],
+          },
+          { users: [{ name: { first: 'Mary' }, role: 'admin' }] },
+        ],
+      }),
+    ).toEqual([
+      {
+        users: [
+          { name: { first: 'Joe' }, role: 'admin' },
+          { name: { first: 'Jane' }, role: 'moderator' },
+        ],
+      },
+    ])
+  })
+  it('filters with nested objects on the same level only', () => {
+    const fn = parse('arr | filter:{user: {name: "Bob"}}')
+    expect(
+      fn({
+        arr: [
+          { user: 'Bob' },
+          { user: { name: 'Bob' } },
+          { user: { name: { first: 'Bob', last: 'Fox' } } },
+        ],
+      }),
+    ).toEqual([{ user: { name: 'Bob' } }])
+  })
+  it('filters with a wildcard property', () => {
+    const fn = parse('arr | filter:{$: "o"}')
+    expect(
+      fn({
+        arr: [
+          { name: 'Joe', role: 'admin' },
+          { name: 'Jane', role: 'moderator' },
+          { name: 'Mary', role: 'admin' },
+        ],
+      }),
+    ).toEqual([
+      { name: 'Joe', role: 'admin' },
+      { name: 'Jane', role: 'moderator' },
+    ])
+  })
+  it('filters nested objects with a wildcard property', () => {
+    const fn = parse('arr | filter:{$: "o"}')
+    expect(
+      fn({
+        arr: [
+          { name: { first: 'Joe' }, role: 'admin' },
+          { name: { first: 'Jane' }, role: 'moderator' },
+          { name: { first: 'Mary' }, role: 'admin' },
+        ],
+      }),
+    ).toEqual([
+      { name: { first: 'Joe' }, role: 'admin' },
+      { name: { first: 'Jane' }, role: 'moderator' },
+    ])
+  })
+  it('filters wildcard properties scoped to parent', () => {
+    const fn = parse('arr | filter:{name: {$: "o"}}')
+    expect(
+      fn({
+        arr: [
+          { name: { first: 'Joe', last: 'Fox' }, role: 'admin' },
+          { name: { first: 'Jane', last: 'Quick' }, role: 'moderator' },
+          { name: { first: 'Mary', last: 'Brown' }, role: 'admin' },
+        ],
+      }),
+    ).toEqual([
+      { name: { first: 'Joe', last: 'Fox' }, role: 'admin' },
+      { name: { first: 'Mary', last: 'Brown' }, role: 'admin' },
+    ])
+  })
+  it('filters primitives with a wildcard property', () => {
+    const fn = parse('arr | filter:{$: "o"}')
+    expect(fn({ arr: ['Joe', 'Jane', 'Mary'] })).toEqual(['Joe'])
+  })
+  it('filters with a nested wildcard property', () => {
+    const fn = parse('arr | filter:{$: {$: "o"}}')
+    expect(
+      fn({
+        arr: [
+          { name: { first: 'Joe' }, role: 'admin' },
+          { name: { first: 'Jane' }, role: 'moderator' },
+          { name: { first: 'Mary' }, role: 'admin' },
+        ],
+      }),
+    ).toEqual([{ name: { first: 'Joe' }, role: 'admin' }])
+  })
+  it('allows using a custom comparator', () => {
+    const fn = parse('arr | filter:{$: "o"}:myComparator')
+    expect(
+      fn({
+        arr: ['o', 'oo', 'ao', 'aa'],
+        myComparator: function (left, right) {
+          return left === right
+        },
+      }),
+    ).toEqual(['o'])
+  })
+  it('allows using an equality comparator', () => {
+    const fn = parse('arr | filter:{name: "Jo"}:true')
+    expect(fn({ arr: [{ name: 'Jo' }, { name: 'Joe' }] })).toEqual([
+      { name: 'Jo' },
+    ])
+  })
 })
