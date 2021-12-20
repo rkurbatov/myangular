@@ -1,5 +1,7 @@
 import { isObject } from 'lodash'
 
+import { filterFilter } from './filterFilter'
+
 const filters = {}
 
 export function register(name, factory) {
@@ -17,3 +19,5 @@ export function register(name, factory) {
 export function filter(name) {
   return filters[name]
 }
+
+register('filter', filterFilter)
