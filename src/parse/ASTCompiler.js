@@ -1,4 +1,4 @@
-import { isNull, isString, initial, last, isEmpty } from 'lodash'
+import { isNull, isString, initial, last, isEmpty, reduce } from 'lodash'
 import { AST } from './AST'
 import { filter } from '../filter'
 
@@ -39,6 +39,7 @@ export class ASTCompiler {
 
   compile(text) {
     const ast = this.astBuilder.ast(text)
+    markConstantExpressions(ast)
     this.#recurse(ast)
     const fnBody = `
       ${this.#filterPrefix()}
@@ -46,7 +47,7 @@ export class ASTCompiler {
         ${this.#varsDefinition()} ${this.state.body.join('')}
       };
       return fn;`
-    return new Function(
+    const fn = new Function(
       'ensureSafeMemberName',
       'ensureSafeObject',
       'ensureSafeFunction',
@@ -60,6 +61,9 @@ export class ASTCompiler {
       ASTCompiler.#ifDefined,
       filter,
     )
+    fn.literal = ASTCompiler.#isLiteral(ast)
+    fn.constant = ast.constant
+    return fn
   }
 
   #recurse(ast, context, create) {
@@ -440,8 +444,106 @@ export class ASTCompiler {
   #addEnsureSafeFunction(expr) {
     this.state.body.push('ensureSafeFunction(' + expr + ');')
   }
+
+  static #isLiteral(ast) {
+    return (
+      ast.body.length === 0 ||
+      (ast.body.length === 1 &&
+        [AST.Literal, AST.ArrayExpression, AST.ObjectExpression].includes(
+          ast.body[0].type,
+        ))
+    )
+  }
 }
 
 function isDomNode(obj) {
   return obj.children && (obj.nodeName || (obj.prop && obj.find && obj.attr))
+}
+
+function markConstantExpressions(ast) {
+  switch (ast.type) {
+    case AST.Literal:
+      ast.constant = true
+      break
+
+    case AST.Identifier:
+    case AST.ThisExpression:
+    case AST.LocalsExpression:
+      ast.constant = false
+      break
+
+    case AST.Program:
+      ast.constant = reduce(
+        ast.body,
+        (allConstants, expr) => {
+          markConstantExpressions(expr)
+          return allConstants && expr.constant
+        },
+        true,
+      )
+      break
+
+    case AST.ArrayExpression:
+      ast.constant = reduce(
+        ast.elements,
+        (allConstants, element) => {
+          markConstantExpressions(element)
+          return allConstants && element.constant
+        },
+        true,
+      )
+      break
+
+    case AST.ObjectExpression:
+      ast.constant = reduce(
+        ast.properties,
+        (allConstants, property) => {
+          markConstantExpressions(property.value)
+          return allConstants && property.value.constant
+        },
+        true,
+      )
+      break
+
+    case AST.CallExpression:
+      ast.constant = reduce(
+        ast.arguments,
+        (allConstants, arg) => {
+          markConstantExpressions(arg)
+          return allConstants && arg.constant
+        },
+        !!ast.filter,
+      )
+      break
+
+    case AST.MemberExpression:
+      markConstantExpressions(ast.object)
+      if (ast.computed) {
+        markConstantExpressions(ast.property)
+      }
+      ast.constant =
+        ast.object.constant && (!ast.computed || ast.property.constant)
+      break
+
+    case AST.AssignmentExpression:
+    case AST.BinaryExpression:
+    case AST.LogicalExpression:
+      markConstantExpressions(ast.left)
+      markConstantExpressions(ast.right)
+      ast.constant = ast.left.constant && ast.right.constant
+      break
+
+    case AST.ConditionalExpression:
+      markConstantExpressions(ast.test)
+      markConstantExpressions(ast.consequent)
+      markConstantExpressions(ast.alternate)
+      ast.constant =
+        ast.test.constant && ast.consequent.constant && ast.alternate.constant
+      break
+
+    case AST.UnaryExpression:
+      markConstantExpressions(ast.argument)
+      ast.constant = ast.argument.constant
+      break
+  }
 }
