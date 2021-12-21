@@ -692,4 +692,11 @@ describe('parse', () => {
       expect(fn()).toEqual('*hello!')
     })
   })
+
+  describe('watching expressions', () => {
+    it('returns the function itself when given one', () => {
+      const fn = function () {}
+      expect(parse(fn)).toBe(fn)
+    })
+  })
 })

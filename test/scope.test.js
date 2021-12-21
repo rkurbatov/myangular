@@ -1,4 +1,4 @@
-import { range, times } from 'lodash'
+import { range, times, constant } from 'lodash'
 
 import { Scope } from '../src/scope'
 
@@ -1626,12 +1626,58 @@ describe('Scope', () => {
       scope.$destroy()
       expect(listener).toHaveBeenCalled()
     })
-    it('no longers calls listeners after destroyed', () => {
+    it('no longer calls listeners after destroyed', () => {
       const listener = jasmine.createSpy()
       scope.$on('myEvent', listener)
       scope.$destroy()
       scope.$emit('myEvent')
       expect(listener).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('parsing expressions', () => {
+    let parent
+    let scope
+
+    beforeEach(() => {
+      parent = new Scope()
+      scope = parent.$new()
+    })
+
+    it('accepts expressions for $watch function', () => {
+      let theValue
+      scope.aValue = 42
+      scope.$watch('aValue', (newValue, oldValue, scope) => {
+        theValue = newValue
+      })
+      scope.$digest()
+      expect(theValue).toBe(42)
+    })
+    it('accepts expressions for $watchCollection function', () => {
+      let theValue
+      scope.aColl = [1, 2, 3]
+      scope.$watchCollection('aColl', (newValue, oldValue, scope) => {
+        theValue = newValue
+      })
+      scope.$digest()
+      expect(theValue).toEqual([1, 2, 3])
+    })
+    it('accepts expressions in $eval', () => {
+      expect(scope.$eval('42')).toBe(42)
+    })
+    it('accepts expressions in $apply', () => {
+      scope.aFunction = constant(42)
+      expect(scope.$apply('aFunction()')).toBe(42)
+    })
+    it('accepts expressions in $evalAsync', (done) => {
+      let called
+      scope.aFunction = function () {}
+      called = true
+      scope.$evalAsync('aFunction()')
+      scope.$$postDigest(function () {
+        expect(called).toBe(true)
+        done()
+      })
     })
   })
 })

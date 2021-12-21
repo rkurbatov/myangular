@@ -8,6 +8,8 @@ import {
   cloneDeep,
 } from 'lodash'
 
+import { parse } from '../parse'
+
 // Symbol is a reference value, as it equals only to itself.
 // It is set as an initial watch value to distinct it from undefined
 const INIT_WATCH_VALUE = Symbol('initial watch value')
@@ -32,7 +34,7 @@ export class Scope {
   // valueEq — should we use shallow equality check instead of reference check
   $watch(watchFn, listenerFn = () => {}, valueEq = false) {
     const watcher = {
-      watchFn,
+      watchFn: parse(watchFn),
       listenerFn,
       valueEq,
       last: INIT_WATCH_VALUE,
@@ -164,7 +166,8 @@ export class Scope {
 
   // Executes the code in context of scope
   $eval(expr, locals) {
-    return expr(this, locals)
+    const parsedExpr = parse(expr)
+    return parsedExpr(this, locals)
   }
 
   // Executes the function in context of scope and starts digest.
@@ -291,9 +294,11 @@ export class Scope {
     let changeCount = 0 // counter inside watchFn closure increases on every detected change
     let firstRun = true
 
+    const parsedWatchFn = parse(watchFn)
+
     const internalWatchFn = (scope) => {
       let newLength
-      newValue = watchFn(scope)
+      newValue = parsedWatchFn(scope)
       if (isObject(newValue)) {
         if (Scope.$$isArrayLike(newValue)) {
           if (!Array.isArray(oldValue)) {
