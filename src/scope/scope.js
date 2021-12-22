@@ -33,8 +33,20 @@ export class Scope {
   // listenerFn - is the function that is called on data change
   // valueEq — should we use shallow equality check instead of reference check
   $watch(watchFn, listenerFn = () => {}, valueEq = false) {
+    const parsedWatchFn = parse(watchFn)
+
+    if (parsedWatchFn.$$watchDelegate) {
+      // Bypass normal watch creation and delegate it to the expression
+      return parsedWatchFn.$$watchDelegate(
+        this,
+        listenerFn,
+        valueEq,
+        parsedWatchFn,
+      )
+    }
+
     const watcher = {
-      watchFn: parse(watchFn),
+      watchFn: parsedWatchFn,
       listenerFn,
       valueEq,
       last: INIT_WATCH_VALUE,
