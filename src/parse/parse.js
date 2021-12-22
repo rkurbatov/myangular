@@ -1,4 +1,12 @@
-import { isFunction, isUndefined, noop, some } from 'lodash'
+import {
+  isFunction,
+  isUndefined,
+  isNaN,
+  noop,
+  some,
+  times,
+  constant,
+} from 'lodash'
 
 import { Lexer } from './Lexer'
 import { AST } from './AST'
@@ -22,6 +30,8 @@ export const parse = (expr) => {
         parseFn.$$watchDelegate = parseFn.literal
           ? oneTimeLiteralWatchDelegate
           : oneTimeWatchDelegate
+      } else if (parseFn.inputs) {
+        parseFn.$$watchDelegate = inputsWatchDelegate
       }
 
       return parseFn
@@ -101,4 +111,43 @@ function oneTimeLiteralWatchDelegate(scope, listenerFn, valueEq, watchFn) {
   )
 
   return unwatch
+}
+
+function inputsWatchDelegate(scope, listenerFn, valueEq, watchFn) {
+  const inputsExpressions = watchFn.inputs
+  const oldValues = times(
+    inputsExpressions.length,
+    constant(() => {}),
+  )
+  let lastResult
+
+  return scope.$watch(
+    function () {
+      let changed = false
+      inputsExpressions.forEach((inputExpr, i) => {
+        const newValue = inputExpr(scope)
+        if (changed || !expressionInputDirtyCheck(newValue, oldValues[i])) {
+          changed = true
+          oldValues[i] = newValue
+        }
+      })
+
+      if (changed) {
+        lastResult = watchFn(scope)
+      }
+      return lastResult
+    },
+    listenerFn,
+    valueEq,
+  )
+}
+
+function expressionInputDirtyCheck(newValue, oldValue) {
+  return (
+    newValue === oldValue ||
+    (typeof newValue === 'number' &&
+      typeof oldValue === 'number' &&
+      isNaN(newValue) &&
+      isNaN(oldValue))
+  )
 }

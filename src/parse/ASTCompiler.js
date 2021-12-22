@@ -1,4 +1,12 @@
-import { isNull, isString, initial, last, isEmpty, reduce } from 'lodash'
+import {
+  isNull,
+  isString,
+  initial,
+  last,
+  isEmpty,
+  reduce,
+  forEach,
+} from 'lodash'
 import { AST } from './AST'
 import { filter } from '../filter'
 
@@ -30,22 +38,36 @@ export class ASTCompiler {
   constructor(astBuilder) {
     this.astBuilder = astBuilder
     this.state = {
-      body: [], // elements of a generated evaluation function
+      fn: {
+        body: [], // elements of a generated evaluation function
+        vars: [], // intermediate vars created for storing values
+      },
+      inputs: [],
       nextId: 0, // basis of unique ids used by function
-      vars: [], // intermediate vars created for storing values
       filters: {}, // list of registered filters used in expression
     }
   }
 
   compile(text) {
     const ast = this.astBuilder.ast(text)
-    markConstantExpressions(ast)
+    markConstantAndWatchExpressions(ast)
+    this.stage = 'inputs'
+    forEach(getInputs(ast.body), (input, idx) => {
+      const inputKey = 'fn' + idx
+      this.state[inputKey] = { body: [], vars: [] }
+      this.state.computing = inputKey
+      this.state[inputKey].body.push('return ' + this.#recurse(input) + ';')
+      this.state.inputs.push(inputKey)
+    })
+    this.stage = 'main'
+    this.state.computing = 'fn'
     this.#recurse(ast)
     const fnBody = `
       ${this.#filterPrefix()}
       var fn=function(s,l){
-        ${this.#varsDefinition()} ${this.state.body.join('')}
+        ${this.#varsDefinition()} ${this.state.fn.body.join('')}
       };
+      ${this.#watchFns()}
       return fn;`
     const fn = new Function(
       'ensureSafeMemberName',
@@ -70,9 +92,13 @@ export class ASTCompiler {
     switch (ast.type) {
       case AST.Program: {
         initial(ast.body).forEach((stmt) => {
-          this.state.body.push(this.#recurse(stmt), ';')
+          this.state[this.state.computing].body.push(this.#recurse(stmt), ';')
         })
-        this.state.body.push('return ', this.#recurse(last(ast.body)), ';')
+        this.state[this.state.computing].body.push(
+          'return ',
+          this.#recurse(last(ast.body)),
+          ';',
+        )
         break
       }
 
@@ -98,7 +124,10 @@ export class ASTCompiler {
         ASTCompiler.#ensureSafeMemberName(ast.name)
         const intoId = this.#nextId()
 
-        const hasL = ASTCompiler.#getHasOwnProperty('l', ast.name)
+        const hasL =
+          this.stage === 'inputs'
+            ? 'false'
+            : ASTCompiler.#getHasOwnProperty('l', ast.name)
         const lAssignment = ASTCompiler.#assign(
           intoId,
           ASTCompiler.#nonComputedMember('l', ast.name),
@@ -124,8 +153,7 @@ export class ASTCompiler {
         this.#if_(notHasLAndHasS, sAssignment)
 
         if (context) {
-          context.context =
-            ASTCompiler.#getHasOwnProperty('l', ast.name) + ' ? l : s'
+          context.context = hasL + ' ? l : s'
           context.name = ast.name
           context.computed = false
         }
@@ -274,7 +302,7 @@ export class ASTCompiler {
 
       case AST.LogicalExpression: {
         const intoId = this.#nextId()
-        this.state.body.push(
+        this.state[this.state.computing].body.push(
           ASTCompiler.#assign(intoId, this.#recurse(ast.left)),
         )
         this.#if_(
@@ -287,7 +315,7 @@ export class ASTCompiler {
       case AST.ConditionalExpression: {
         const intoId = this.#nextId()
         const testId = this.#nextId()
-        this.state.body.push(
+        this.state[this.state.computing].body.push(
           ASTCompiler.#assign(testId, this.#recurse(ast.test)),
         )
         this.#if_(
@@ -304,7 +332,13 @@ export class ASTCompiler {
   }
 
   #if_(test, consequent) {
-    this.state.body.push('if(', test, '){', consequent, '}')
+    this.state[this.state.computing].body.push(
+      'if(',
+      test,
+      '){',
+      consequent,
+      '}',
+    )
   }
 
   #ifDefined_(value, defaultValue) {
@@ -313,13 +347,13 @@ export class ASTCompiler {
 
   #nextId(skip) {
     const id = 'v' + this.state.nextId++
-    if (!skip) this.state.vars.push(id)
+    if (!skip) this.state[this.state.computing].vars.push(id)
     return id
   }
 
   #varsDefinition() {
-    return this.state.vars.length
-      ? 'var ' + this.state.vars.join(',') + ';'
+    return this.state.fn.vars.length
+      ? 'var ' + this.state.fn.vars.join(',') + ';'
       : ''
   }
 
@@ -434,15 +468,41 @@ export class ASTCompiler {
   }
 
   #addEnsureSafeMemberName(expr) {
-    this.state.body.push('ensureSafeMemberName(' + expr + ');')
+    this.state[this.state.computing].body.push(
+      'ensureSafeMemberName(' + expr + ');',
+    )
   }
 
   #addEnsureSafeObject(expr) {
-    this.state.body.push('ensureSafeObject(' + expr + ');')
+    this.state[this.state.computing].body.push(
+      'ensureSafeObject(' + expr + ');',
+    )
   }
 
   #addEnsureSafeFunction(expr) {
-    this.state.body.push('ensureSafeFunction(' + expr + ');')
+    this.state[this.state.computing].body.push(
+      'ensureSafeFunction(' + expr + ');',
+    )
+  }
+
+  #watchFns() {
+    const result = []
+    this.state.inputs.forEach((inputName) => {
+      result.push(
+        'var ',
+        inputName,
+        '=function(s) {',
+        this.state[inputName].vars.length
+          ? 'var ' + this.state[inputName].vars.join(',') + ';'
+          : '',
+        this.state[inputName].body.join(''),
+        '};',
+      )
+    })
+    if (result.length) {
+      result.push('fn.inputs = [', this.state.inputs.join(','), '];')
+    }
+    return result.join('')
   }
 
   static #isLiteral(ast) {
@@ -460,23 +520,31 @@ function isDomNode(obj) {
   return obj.children && (obj.nodeName || (obj.prop && obj.find && obj.attr))
 }
 
-function markConstantExpressions(ast) {
+function markConstantAndWatchExpressions(ast) {
+  let argsToWatch
+
   switch (ast.type) {
     case AST.Literal:
       ast.constant = true
+      ast.toWatch = []
       break
 
     case AST.Identifier:
+      ast.constant = false
+      ast.toWatch = [ast]
+      break
+
     case AST.ThisExpression:
     case AST.LocalsExpression:
       ast.constant = false
+      ast.toWatch = []
       break
 
     case AST.Program:
       ast.constant = reduce(
         ast.body,
         (allConstants, expr) => {
-          markConstantExpressions(expr)
+          markConstantAndWatchExpressions(expr)
           return allConstants && expr.constant
         },
         true,
@@ -484,66 +552,102 @@ function markConstantExpressions(ast) {
       break
 
     case AST.ArrayExpression:
+      argsToWatch = []
       ast.constant = reduce(
         ast.elements,
         (allConstants, element) => {
-          markConstantExpressions(element)
+          markConstantAndWatchExpressions(element)
+          if (!element.constant) {
+            argsToWatch.push.apply(argsToWatch, element.toWatch)
+          }
           return allConstants && element.constant
         },
         true,
       )
+      ast.toWatch = argsToWatch
       break
 
     case AST.ObjectExpression:
+      argsToWatch = []
       ast.constant = reduce(
         ast.properties,
         (allConstants, property) => {
-          markConstantExpressions(property.value)
+          markConstantAndWatchExpressions(property.value)
+          if (!property.value.constant) {
+            argsToWatch.push.apply(argsToWatch, property.value.toWatch)
+          }
           return allConstants && property.value.constant
         },
         true,
       )
+      ast.toWatch = argsToWatch
       break
 
     case AST.CallExpression:
+      argsToWatch = []
       ast.constant = reduce(
         ast.arguments,
         (allConstants, arg) => {
-          markConstantExpressions(arg)
+          markConstantAndWatchExpressions(arg)
+          if (!arg.constant) {
+            argsToWatch.push.apply(argsToWatch, arg.toWatch)
+          }
           return allConstants && arg.constant
         },
         !!ast.filter,
       )
+      ast.toWatch = ast.filter ? argsToWatch : [ast]
       break
 
     case AST.MemberExpression:
-      markConstantExpressions(ast.object)
+      markConstantAndWatchExpressions(ast.object)
       if (ast.computed) {
-        markConstantExpressions(ast.property)
+        markConstantAndWatchExpressions(ast.property)
       }
       ast.constant =
         ast.object.constant && (!ast.computed || ast.property.constant)
+      ast.toWatch = [ast]
       break
 
     case AST.AssignmentExpression:
-    case AST.BinaryExpression:
     case AST.LogicalExpression:
-      markConstantExpressions(ast.left)
-      markConstantExpressions(ast.right)
+      markConstantAndWatchExpressions(ast.left)
+      markConstantAndWatchExpressions(ast.right)
       ast.constant = ast.left.constant && ast.right.constant
+      ast.toWatch = [ast]
+      break
+
+    case AST.BinaryExpression:
+      markConstantAndWatchExpressions(ast.left)
+      markConstantAndWatchExpressions(ast.right)
+      ast.constant = ast.left.constant && ast.right.constant
+      ast.toWatch = [...ast.left.toWatch, ...ast.right.toWatch]
       break
 
     case AST.ConditionalExpression:
-      markConstantExpressions(ast.test)
-      markConstantExpressions(ast.consequent)
-      markConstantExpressions(ast.alternate)
+      markConstantAndWatchExpressions(ast.test)
+      markConstantAndWatchExpressions(ast.consequent)
+      markConstantAndWatchExpressions(ast.alternate)
       ast.constant =
         ast.test.constant && ast.consequent.constant && ast.alternate.constant
+      ast.toWatch = [ast]
       break
 
     case AST.UnaryExpression:
-      markConstantExpressions(ast.argument)
+      markConstantAndWatchExpressions(ast.argument)
       ast.constant = ast.argument.constant
+      ast.toWatch = ast.argument.toWatch
       break
+  }
+}
+
+function getInputs(ast) {
+  if (ast.length !== 1) {
+    return
+  }
+
+  const candidate = ast[0].toWatch
+  if (candidate.length !== 1 || candidate[0] !== ast[0]) {
+    return candidate
   }
 }
