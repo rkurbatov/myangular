@@ -584,6 +584,7 @@ function markConstantAndWatchExpressions(ast) {
       break
 
     case AST.CallExpression:
+      const stateless = ast.filter && !filter(ast.callee.name).$stateful
       argsToWatch = []
       ast.constant = reduce(
         ast.arguments,
@@ -594,9 +595,9 @@ function markConstantAndWatchExpressions(ast) {
           }
           return allConstants && arg.constant
         },
-        !!ast.filter,
+        !!stateless,
       )
-      ast.toWatch = ast.filter ? argsToWatch : [ast]
+      ast.toWatch = stateless ? argsToWatch : [ast]
       break
 
     case AST.MemberExpression:

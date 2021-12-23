@@ -1,6 +1,7 @@
-import { range, times, constant } from 'lodash'
+import { range, times, constant, extend } from 'lodash'
 
 import { Scope } from '../src/scope'
+import { register } from '../src/filter'
 
 describe('Scope', () => {
   it('can be constructed and used as an object', () => {
@@ -1753,6 +1754,23 @@ describe('Scope', () => {
       scope.$digest()
       expect(values.length).toBe(2)
       expect(values[1]).toEqual([1, 2, 4])
+    })
+    it('allows $stateful filter value to change over time', (done) => {
+      register('withTime', function () {
+        return extend((v) => new Date().toISOString() + ': ' + v, {
+          $stateful: true,
+        })
+      })
+      const listenerSpy = jasmine.createSpy()
+      scope.$watch('42 | withTime', listenerSpy)
+      scope.$digest()
+      const firstValue = listenerSpy.calls.mostRecent().args[0]
+      setTimeout(function () {
+        scope.$digest()
+        const secondValue = listenerSpy.calls.mostRecent().args[0]
+        expect(secondValue).not.toEqual(firstValue)
+        done()
+      }, 100)
     })
   })
 })
