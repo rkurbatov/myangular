@@ -1,13 +1,13 @@
-import {
-  isNull,
-  isString,
-  initial,
-  last,
-  isEmpty,
-  reduce,
-  forEach,
-} from 'lodash'
+import { initial, last, isEmpty } from 'lodash'
+
 import { AST } from './AST'
+import {
+  ensure,
+  escape,
+  getInputs,
+  isLiteral,
+  markConstantAndWatchExpressions,
+} from './helpers'
 import { filter } from '../filter'
 
 // Compiles AST into Expression Function that evaluates expression represented in tree
@@ -51,17 +51,20 @@ export class ASTCompiler {
   compile(text) {
     const ast = this.astBuilder.ast(text)
     markConstantAndWatchExpressions(ast)
+
     this.stage = 'inputs'
-    forEach(getInputs(ast.body), (input, idx) => {
+    ;(getInputs(ast.body) || []).forEach((input, idx) => {
       const inputKey = 'fn' + idx
       this.state[inputKey] = { body: [], vars: [] }
       this.state.computing = inputKey
       this.state[inputKey].body.push('return ' + this.#recurse(input) + ';')
       this.state.inputs.push(inputKey)
     })
+
     this.stage = 'main'
     this.state.computing = 'fn'
     this.#recurse(ast)
+
     const fnBody = `
       ${this.#filterPrefix()}
       var fn=function(s,l){
@@ -69,6 +72,7 @@ export class ASTCompiler {
       };
       ${this.#watchFns()}
       return fn;`
+
     const fn = new Function(
       'ensureSafeMemberName',
       'ensureSafeObject',
@@ -77,13 +81,13 @@ export class ASTCompiler {
       'filter',
       fnBody,
     )(
-      ASTCompiler.#ensureSafeMemberName,
-      ASTCompiler.#ensureSafeObject,
-      ASTCompiler.#ensureSafeFunction,
-      ASTCompiler.#ifDefined,
+      ensure.safeMemberName,
+      ensure.safeObject,
+      ensure.safeFunction,
+      this.#ifDefined,
       filter,
     )
-    fn.literal = ASTCompiler.#isLiteral(ast)
+    fn.literal = isLiteral(ast)
     fn.constant = ast.constant
     return fn
   }
@@ -103,7 +107,7 @@ export class ASTCompiler {
       }
 
       case AST.Literal:
-        return ASTCompiler.#escape(ast.value)
+        return escape(ast.value)
 
       case AST.ArrayExpression:
         const elements = ast.elements.map((element) => this.#recurse(element))
@@ -114,41 +118,41 @@ export class ASTCompiler {
           const key =
             property.key.type === AST.Identifier
               ? property.key.name
-              : ASTCompiler.#escape(property.key.value)
+              : escape(property.key.value)
           const value = this.#recurse(property.value)
           return key + ':' + value
         })
         return '{' + properties.join(',') + '}'
 
       case AST.Identifier: {
-        ASTCompiler.#ensureSafeMemberName(ast.name)
+        ensure.safeMemberName(ast.name)
         const intoId = this.#nextId()
 
         const hasL =
           this.stage === 'inputs'
             ? 'false'
-            : ASTCompiler.#getHasOwnProperty('l', ast.name)
-        const lAssignment = ASTCompiler.#assign(
+            : this.#getHasOwnProperty('l', ast.name)
+        const lAssignment = this.#assign(
           intoId,
-          ASTCompiler.#nonComputedMember('l', ast.name),
+          this.#nonComputedMember('l', ast.name),
         )
         this.#if_(hasL, lAssignment)
 
         if (create) {
-          const hasS = ASTCompiler.#getHasOwnProperty('s', ast.name)
+          const hasS = this.#getHasOwnProperty('s', ast.name)
           const createCondition =
-            ASTCompiler.#not(hasL) + ' && s && ' + ASTCompiler.#not(hasS)
-          const createAssignment = ASTCompiler.#assign(
-            ASTCompiler.#nonComputedMember('s', ast.name),
+            this.#not(hasL) + ' && s && ' + this.#not(hasS)
+          const createAssignment = this.#assign(
+            this.#nonComputedMember('s', ast.name),
             '{}',
           )
           this.#if_(createCondition, createAssignment)
         }
 
-        const notHasLAndHasS = ASTCompiler.#not(hasL) + ' && s'
-        const sAssignment = ASTCompiler.#assign(
+        const notHasLAndHasS = this.#not(hasL) + ' && s'
+        const sAssignment = this.#assign(
           intoId,
-          ASTCompiler.#nonComputedMember('s', ast.name),
+          this.#nonComputedMember('s', ast.name),
         )
         this.#if_(notHasLAndHasS, sAssignment)
 
@@ -179,36 +183,31 @@ export class ASTCompiler {
           const right = this.#recurse(ast.property)
           this.#addEnsureSafeMemberName(right)
           if (create) {
-            const computed = ASTCompiler.#computedMember(left, right)
-            const createClause = ASTCompiler.#not(computed)
-            const createAssignment = ASTCompiler.#assign(computed, '{}')
+            const computed = this.#computedMember(left, right)
+            const createClause = this.#not(computed)
+            const createAssignment = this.#assign(computed, '{}')
             this.#if_(createClause, createAssignment)
           }
-          assignment = ASTCompiler.#assign(
+          assignment = this.#assign(
             intoId,
-            'ensureSafeObject(' +
-              ASTCompiler.#computedMember(left, right) +
-              ')',
+            'ensureSafeObject(' + this.#computedMember(left, right) + ')',
           )
           if (context) {
             context.name = right
             context.computed = true
           }
         } else {
-          ASTCompiler.#ensureSafeMemberName(ast.property.name)
+          ensure.safeMemberName(ast.property.name)
           if (create) {
-            const nonComputed = ASTCompiler.#nonComputedMember(
-              left,
-              ast.property.name,
-            )
-            const createClause = ASTCompiler.#not(nonComputed)
-            const createAssignment = ASTCompiler.#assign(nonComputed, '{}')
+            const nonComputed = this.#nonComputedMember(left, ast.property.name)
+            const createClause = this.#not(nonComputed)
+            const createAssignment = this.#assign(nonComputed, '{}')
             this.#if_(createClause, createAssignment)
           }
-          assignment = ASTCompiler.#assign(
+          assignment = this.#assign(
             intoId,
             'ensureSafeObject(' +
-              ASTCompiler.#nonComputedMember(left, ast.property.name) +
+              this.#nonComputedMember(left, ast.property.name) +
               ')',
           )
           if (context) {
@@ -234,12 +233,12 @@ export class ASTCompiler {
           if (callContext.name) {
             this.#addEnsureSafeObject(callContext.context)
             if (callContext.computed) {
-              callee = ASTCompiler.#computedMember(
+              callee = this.#computedMember(
                 callContext.context,
                 callContext.name,
               )
             } else {
-              callee = ASTCompiler.#nonComputedMember(
+              callee = this.#nonComputedMember(
                 callContext.context,
                 callContext.name,
               )
@@ -261,10 +260,10 @@ export class ASTCompiler {
         const lftContext = {}
         this.#recurse(ast.left, lftContext, true) // Automatically create missing nested properties
         const leftExpr = lftContext.computed
-          ? ASTCompiler.#computedMember(lftContext.context, lftContext.name)
-          : ASTCompiler.#nonComputedMember(lftContext.context, lftContext.name)
+          ? this.#computedMember(lftContext.context, lftContext.name)
+          : this.#nonComputedMember(lftContext.context, lftContext.name)
         const rightExpr = 'ensureSafeObject(' + this.#recurse(ast.right) + ')'
-        return ASTCompiler.#assign(leftExpr, rightExpr)
+        return this.#assign(leftExpr, rightExpr)
       }
 
       case AST.UnaryExpression: {
@@ -303,11 +302,11 @@ export class ASTCompiler {
       case AST.LogicalExpression: {
         const intoId = this.#nextId()
         this.state[this.state.computing].body.push(
-          ASTCompiler.#assign(intoId, this.#recurse(ast.left)),
+          this.#assign(intoId, this.#recurse(ast.left)),
         )
         this.#if_(
-          ast.operator === '&&' ? intoId : ASTCompiler.#not(intoId),
-          ASTCompiler.#assign(intoId, this.#recurse(ast.right)),
+          ast.operator === '&&' ? intoId : this.#not(intoId),
+          this.#assign(intoId, this.#recurse(ast.right)),
         )
         return intoId
       }
@@ -316,15 +315,12 @@ export class ASTCompiler {
         const intoId = this.#nextId()
         const testId = this.#nextId()
         this.state[this.state.computing].body.push(
-          ASTCompiler.#assign(testId, this.#recurse(ast.test)),
+          this.#assign(testId, this.#recurse(ast.test)),
         )
+        this.#if_(testId, this.#assign(intoId, this.#recurse(ast.consequent)))
         this.#if_(
-          testId,
-          ASTCompiler.#assign(intoId, this.#recurse(ast.consequent)),
-        )
-        this.#if_(
-          ASTCompiler.#not(testId),
-          ASTCompiler.#assign(intoId, this.#recurse(ast.alternate)),
+          this.#not(testId),
+          this.#assign(intoId, this.#recurse(ast.alternate)),
         )
         return intoId
       }
@@ -341,9 +337,8 @@ export class ASTCompiler {
     )
   }
 
-  #ifDefined_(value, defaultValue) {
-    return 'ifDefined(' + value + ',' + ASTCompiler.#escape(defaultValue) + ')'
-  }
+  #ifDefined_ = (value, defaultValue) =>
+    'ifDefined(' + value + ',' + escape(defaultValue) + ')'
 
   #nextId(skip) {
     const id = 'v' + this.state.nextId++
@@ -351,11 +346,8 @@ export class ASTCompiler {
     return id
   }
 
-  #varsDefinition() {
-    return this.state.fn.vars.length
-      ? 'var ' + this.state.fn.vars.join(',') + ';'
-      : ''
-  }
+  #varsDefinition = () =>
+    this.state.fn.vars.length ? 'var ' + this.state.fn.vars.join(',') + ';' : ''
 
   #filter(name) {
     if (!this.state.filters.hasOwnProperty(name)) {
@@ -371,101 +363,23 @@ export class ASTCompiler {
     } else {
       const parts = []
       for (const [filterName, varName] of Object.entries(this.state.filters)) {
-        parts.push(
-          varName + ' = filter(' + ASTCompiler.#escape(filterName) + ')',
-        )
+        parts.push(varName + ' = filter(' + escape(filterName) + ')')
       }
       return 'var ' + parts.join(',') + ';'
     }
   }
 
-  static #assign(id, value) {
-    return id + '=' + value + ';'
-  }
+  #assign = (id, value) => id + '=' + value + ';'
+  #not = (e) => '!(' + e + ')'
 
-  static #not(e) {
-    return '!(' + e + ')'
-  }
+  #getHasOwnProperty = (object, property) =>
+    object + ' && (' + escape(property) + ' in ' + object + ')'
 
-  static #escape(value) {
-    if (isString(value)) {
-      return (
-        "'" +
-        value.replace(
-          ASTCompiler.#stringEscapeRegex,
-          ASTCompiler.#stringEscapeFn,
-        ) +
-        "'"
-      )
-    } else if (isNull(value)) {
-      return 'null'
-    } else {
-      return value
-    }
-  }
+  #nonComputedMember = (left, right) => '(' + left + ').' + right
+  #computedMember = (left, right) => '(' + left + ')[' + right + ']'
 
-  static #getHasOwnProperty(object, property) {
-    return (
-      object + ' && (' + ASTCompiler.#escape(property) + ' in ' + object + ')'
-    )
-  }
-
-  static #stringEscapeRegex = /[^ a-zA-Z0-9]/g
-  static #stringEscapeFn = (c) =>
-    '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
-
-  static #nonComputedMember = (left, right) => '(' + left + ').' + right
-  static #computedMember = (left, right) => '(' + left + ')[' + right + ']'
-
-  static #ensureSafeMemberName(name) {
-    if (
-      [
-        'constructor',
-        '__proto__',
-        '__defineGetter__',
-        '__defineSetter__',
-        '__lookupGetter__',
-        '__lookupSetter__',
-      ].includes(name)
-    ) {
-      throw 'Attempting to access a disallowed field in Angular expressions!'
-    }
-  }
-
-  static #ensureSafeObject(obj) {
-    if (obj) {
-      if (obj.window === obj) {
-        throw 'Referencing window in Angular expressions is disallowed!'
-      } else if (isDomNode(obj)) {
-        throw 'Referencing DOM nodes in Angular expressions is disallowed!'
-      } else if (obj.constructor === obj) {
-        throw 'Referencing Function in Angular expressions is disallowed!'
-      } else if (obj === Object) {
-        throw 'Referencing Object in Angular expressions is disallowed!'
-      }
-    }
-    return obj
-  }
-
-  static #ensureSafeFunction(obj) {
-    if (obj) {
-      if (obj.constructor === obj) {
-        throw 'Referencing Function in Angular expressions is disallowed!'
-      } else if (
-        [
-          Function.prototype.call,
-          Function.prototype.bind,
-          Function.prototype.apply,
-        ].includes(obj)
-      ) {
-        throw 'Referencing call, apply or bind in Angular expressions is disallowed'
-      }
-    }
-  }
-
-  static #ifDefined(value, defaultValue) {
-    return typeof value === 'undefined' ? defaultValue : value
-  }
+  #ifDefined = (value, defaultValue) =>
+    typeof value === 'undefined' ? defaultValue : value
 
   #addEnsureSafeMemberName(expr) {
     this.state[this.state.computing].body.push(
@@ -491,7 +405,7 @@ export class ASTCompiler {
       result.push(
         'var ',
         inputName,
-        '=function(s) {',
+        ' = function(s) {',
         this.state[inputName].vars.length
           ? 'var ' + this.state[inputName].vars.join(',') + ';'
           : '',
@@ -503,152 +417,5 @@ export class ASTCompiler {
       result.push('fn.inputs = [', this.state.inputs.join(','), '];')
     }
     return result.join('')
-  }
-
-  static #isLiteral(ast) {
-    return (
-      ast.body.length === 0 ||
-      (ast.body.length === 1 &&
-        [AST.Literal, AST.ArrayExpression, AST.ObjectExpression].includes(
-          ast.body[0].type,
-        ))
-    )
-  }
-}
-
-function isDomNode(obj) {
-  return obj.children && (obj.nodeName || (obj.prop && obj.find && obj.attr))
-}
-
-function markConstantAndWatchExpressions(ast) {
-  let argsToWatch
-
-  switch (ast.type) {
-    case AST.Literal:
-      ast.constant = true
-      ast.toWatch = []
-      break
-
-    case AST.Identifier:
-      ast.constant = false
-      ast.toWatch = [ast]
-      break
-
-    case AST.ThisExpression:
-    case AST.LocalsExpression:
-      ast.constant = false
-      ast.toWatch = []
-      break
-
-    case AST.Program:
-      ast.constant = reduce(
-        ast.body,
-        (allConstants, expr) => {
-          markConstantAndWatchExpressions(expr)
-          return allConstants && expr.constant
-        },
-        true,
-      )
-      break
-
-    case AST.ArrayExpression:
-      argsToWatch = []
-      ast.constant = reduce(
-        ast.elements,
-        (allConstants, element) => {
-          markConstantAndWatchExpressions(element)
-          if (!element.constant) {
-            argsToWatch.push.apply(argsToWatch, element.toWatch)
-          }
-          return allConstants && element.constant
-        },
-        true,
-      )
-      ast.toWatch = argsToWatch
-      break
-
-    case AST.ObjectExpression:
-      argsToWatch = []
-      ast.constant = reduce(
-        ast.properties,
-        (allConstants, property) => {
-          markConstantAndWatchExpressions(property.value)
-          if (!property.value.constant) {
-            argsToWatch.push.apply(argsToWatch, property.value.toWatch)
-          }
-          return allConstants && property.value.constant
-        },
-        true,
-      )
-      ast.toWatch = argsToWatch
-      break
-
-    case AST.CallExpression:
-      const stateless = ast.filter && !filter(ast.callee.name).$stateful
-      argsToWatch = []
-      ast.constant = reduce(
-        ast.arguments,
-        (allConstants, arg) => {
-          markConstantAndWatchExpressions(arg)
-          if (!arg.constant) {
-            argsToWatch.push.apply(argsToWatch, arg.toWatch)
-          }
-          return allConstants && arg.constant
-        },
-        !!stateless,
-      )
-      ast.toWatch = stateless ? argsToWatch : [ast]
-      break
-
-    case AST.MemberExpression:
-      markConstantAndWatchExpressions(ast.object)
-      if (ast.computed) {
-        markConstantAndWatchExpressions(ast.property)
-      }
-      ast.constant =
-        ast.object.constant && (!ast.computed || ast.property.constant)
-      ast.toWatch = [ast]
-      break
-
-    case AST.AssignmentExpression:
-    case AST.LogicalExpression:
-      markConstantAndWatchExpressions(ast.left)
-      markConstantAndWatchExpressions(ast.right)
-      ast.constant = ast.left.constant && ast.right.constant
-      ast.toWatch = [ast]
-      break
-
-    case AST.BinaryExpression:
-      markConstantAndWatchExpressions(ast.left)
-      markConstantAndWatchExpressions(ast.right)
-      ast.constant = ast.left.constant && ast.right.constant
-      ast.toWatch = [...ast.left.toWatch, ...ast.right.toWatch]
-      break
-
-    case AST.ConditionalExpression:
-      markConstantAndWatchExpressions(ast.test)
-      markConstantAndWatchExpressions(ast.consequent)
-      markConstantAndWatchExpressions(ast.alternate)
-      ast.constant =
-        ast.test.constant && ast.consequent.constant && ast.alternate.constant
-      ast.toWatch = [ast]
-      break
-
-    case AST.UnaryExpression:
-      markConstantAndWatchExpressions(ast.argument)
-      ast.constant = ast.argument.constant
-      ast.toWatch = ast.argument.toWatch
-      break
-  }
-}
-
-function getInputs(ast) {
-  if (ast.length !== 1) {
-    return
-  }
-
-  const candidate = ast[0].toWatch
-  if (candidate.length !== 1 || candidate[0] !== ast[0]) {
-    return candidate
   }
 }
