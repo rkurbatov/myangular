@@ -92,11 +92,9 @@ export class Scope {
 
   // Recursively calls the fn function for every scope in the hierarchy until it returns false.
   $$everyScope(fn) {
-    if (fn(this)) {
-      return this.$$children.every((child) => child.$$everyScope(fn))
-    } else {
-      return false
-    }
+    return fn(this)
+      ? this.$$children.every((child) => child.$$everyScope(fn))
+      : false
   }
 
   $$digestOnce() {

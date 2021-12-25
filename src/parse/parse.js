@@ -24,16 +24,7 @@ export const parse = (expr) => {
       if (oneTime) expr = expr.substring(2)
 
       const parseFn = astCompiler.compile(expr)
-      if (parseFn.constant) {
-        parseFn.$$watchDelegate = constantWatchDelegate
-      } else if (oneTime) {
-        parseFn.$$watchDelegate = parseFn.literal
-          ? oneTimeLiteralWatchDelegate
-          : oneTimeWatchDelegate
-      } else if (parseFn.inputs) {
-        parseFn.$$watchDelegate = inputsWatchDelegate
-      }
-
+      parseFn.$$watchDelegate = getWatchDelegate(parseFn, oneTime)
       return parseFn
 
     case 'function':
@@ -43,6 +34,13 @@ export const parse = (expr) => {
     default:
       return noop
   }
+}
+
+function getWatchDelegate({ constant, literal, inputs }, oneTime) {
+  if (constant) return constantWatchDelegate
+  if (oneTime)
+    return literal ? oneTimeLiteralWatchDelegate : oneTimeWatchDelegate
+  if (inputs) return inputsWatchDelegate
 }
 
 function constantWatchDelegate(scope, listenerFn, valueEq, watchFn) {
@@ -62,6 +60,7 @@ function constantWatchDelegate(scope, listenerFn, valueEq, watchFn) {
 
 function oneTimeWatchDelegate(scope, listenerFn, valueEq, watchFn) {
   let lastValue
+
   const unwatch = scope.$watch(
     () => watchFn(scope),
     (newValue, oldValue, scope) => {
@@ -142,12 +141,5 @@ function inputsWatchDelegate(scope, listenerFn, valueEq, watchFn) {
   )
 }
 
-function expressionInputDirtyCheck(newValue, oldValue) {
-  return (
-    newValue === oldValue ||
-    (typeof newValue === 'number' &&
-      typeof oldValue === 'number' &&
-      isNaN(newValue) &&
-      isNaN(oldValue))
-  )
-}
+const expressionInputDirtyCheck = (newValue, oldValue) =>
+  newValue === oldValue || (Number.isNaN(newValue) && Number.isNaN(oldValue))

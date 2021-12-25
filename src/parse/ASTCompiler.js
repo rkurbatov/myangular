@@ -7,7 +7,7 @@ import {
   getInputs,
   isLiteral,
   markConstantAndWatchExpressions,
-} from './helpers'
+} from './astHelpers'
 import { filter } from '../filter'
 
 // Compiles AST into Expression Function that evaluates expression represented in tree
@@ -92,17 +92,18 @@ export class ASTCompiler {
     return fn
   }
 
+  #bodyPush = (...values) => {
+    this.state[this.state.computing].body.push(...values)
+  }
+
   #recurse(ast, context, create) {
     switch (ast.type) {
       case AST.Program: {
         initial(ast.body).forEach((stmt) => {
-          this.state[this.state.computing].body.push(this.#recurse(stmt), ';')
+          this.#bodyPush(this.#recurse(stmt), ';')
         })
-        this.state[this.state.computing].body.push(
-          'return ',
-          this.#recurse(last(ast.body)),
-          ';',
-        )
+        this.#bodyPush('return ', this.#recurse(last(ast.body)), ';')
+
         break
       }
 
@@ -113,16 +114,15 @@ export class ASTCompiler {
         const elements = ast.elements.map((element) => this.#recurse(element))
         return '[' + elements.join(',') + ']'
 
-      case AST.ObjectExpression:
-        const properties = ast.properties.map((property) => {
+      case AST.ObjectExpression: {
+        const properties = ast.properties.map((p) => {
           const key =
-            property.key.type === AST.Identifier
-              ? property.key.name
-              : escape(property.key.value)
-          const value = this.#recurse(property.value)
+            p.key.type === AST.Identifier ? p.key.name : escape(p.key.value)
+          const value = this.#recurse(p.value)
           return key + ':' + value
         })
         return '{' + properties.join(',') + '}'
+      }
 
       case AST.Identifier: {
         ensure.safeMemberName(ast.name)
@@ -136,7 +136,7 @@ export class ASTCompiler {
           intoId,
           this.#nonComputedMember('l', ast.name),
         )
-        this.#if_(hasL, lAssignment)
+        this.#addIf(hasL, lAssignment)
 
         if (create) {
           const hasS = this.#getHasOwnProperty('s', ast.name)
@@ -146,7 +146,7 @@ export class ASTCompiler {
             this.#nonComputedMember('s', ast.name),
             '{}',
           )
-          this.#if_(createCondition, createAssignment)
+          this.#addIf(createCondition, createAssignment)
         }
 
         const notHasLAndHasS = this.#not(hasL) + ' && s'
@@ -154,7 +154,7 @@ export class ASTCompiler {
           intoId,
           this.#nonComputedMember('s', ast.name),
         )
-        this.#if_(notHasLAndHasS, sAssignment)
+        this.#addIf(notHasLAndHasS, sAssignment)
 
         if (context) {
           context.context = hasL + ' ? l : s'
@@ -182,15 +182,15 @@ export class ASTCompiler {
         if (ast.computed) {
           const right = this.#recurse(ast.property)
           this.#addEnsureSafeMemberName(right)
+          const computed = this.#computedMember(left, right)
           if (create) {
-            const computed = this.#computedMember(left, right)
             const createClause = this.#not(computed)
             const createAssignment = this.#assign(computed, '{}')
-            this.#if_(createClause, createAssignment)
+            this.#addIf(createClause, createAssignment)
           }
           assignment = this.#assign(
             intoId,
-            'ensureSafeObject(' + this.#computedMember(left, right) + ')',
+            'ensureSafeObject(' + computed + ')',
           )
           if (context) {
             context.name = right
@@ -198,24 +198,22 @@ export class ASTCompiler {
           }
         } else {
           ensure.safeMemberName(ast.property.name)
+          const nonComputed = this.#nonComputedMember(left, ast.property.name)
           if (create) {
-            const nonComputed = this.#nonComputedMember(left, ast.property.name)
             const createClause = this.#not(nonComputed)
             const createAssignment = this.#assign(nonComputed, '{}')
-            this.#if_(createClause, createAssignment)
+            this.#addIf(createClause, createAssignment)
           }
           assignment = this.#assign(
             intoId,
-            'ensureSafeObject(' +
-              this.#nonComputedMember(left, ast.property.name) +
-              ')',
+            'ensureSafeObject(' + nonComputed + ')',
           )
           if (context) {
             context.name = ast.property.name
             context.computed = false
           }
         }
-        this.#if_(left, assignment)
+        this.#addIf(left, assignment)
         return intoId
       }
 
@@ -223,6 +221,7 @@ export class ASTCompiler {
         if (ast.filter) {
           const callee = this.#filter(ast.callee.name)
           const args = ast.arguments.map((arg) => this.#recurse(arg))
+
           return callee + '(' + args + ')'
         } else {
           const callContext = {}
@@ -245,6 +244,7 @@ export class ASTCompiler {
             }
           }
           this.#addEnsureSafeFunction(callee)
+
           return (
             callee +
             ' && ensureSafeObject(' +
@@ -263,78 +263,58 @@ export class ASTCompiler {
           ? this.#computedMember(lftContext.context, lftContext.name)
           : this.#nonComputedMember(lftContext.context, lftContext.name)
         const rightExpr = 'ensureSafeObject(' + this.#recurse(ast.right) + ')'
+
         return this.#assign(leftExpr, rightExpr)
       }
 
       case AST.UnaryExpression: {
-        return (
-          ast.operator +
-          '(' +
-          this.#ifDefined_(this.#recurse(ast.argument), 0) +
-          ')'
-        )
+        const argument = this.#ifDefined_(this.#recurse(ast.argument), 0)
+
+        return ast.operator + '(' + argument + ')'
       }
 
       case AST.BinaryExpression: {
+        const left = this.#recurse(ast.left)
+        const right = this.#recurse(ast.right)
+
         if (['+', '-'].includes(ast.operator)) {
-          return (
-            '(' +
-            this.#ifDefined_(this.#recurse(ast.left), 0) +
-            ')' +
-            ast.operator +
-            '(' +
-            this.#ifDefined_(this.#recurse(ast.right), 0) +
-            ')'
-          )
+          const defLeft = this.#ifDefined_(left, 0)
+          const defRight = this.#ifDefined_(right, 0)
+
+          return '(' + defLeft + ')' + ast.operator + '(' + defRight + ')'
         } else {
-          return (
-            '(' +
-            this.#recurse(ast.left) +
-            ')' +
-            ast.operator +
-            '(' +
-            this.#recurse(ast.right) +
-            ')'
-          )
+          return '(' + left + ')' + ast.operator + '(' + right + ')'
         }
       }
 
       case AST.LogicalExpression: {
         const intoId = this.#nextId()
-        this.state[this.state.computing].body.push(
-          this.#assign(intoId, this.#recurse(ast.left)),
-        )
-        this.#if_(
-          ast.operator === '&&' ? intoId : this.#not(intoId),
-          this.#assign(intoId, this.#recurse(ast.right)),
-        )
+        const left = this.#recurse(ast.left)
+        const right = this.#recurse(ast.right)
+
+        this.#bodyPush(this.#assign(intoId, left))
+        const cond = ast.operator === '&&' ? intoId : this.#not(intoId)
+        this.#addIf(cond, this.#assign(intoId, right))
+
         return intoId
       }
 
       case AST.ConditionalExpression: {
         const intoId = this.#nextId()
         const testId = this.#nextId()
-        this.state[this.state.computing].body.push(
-          this.#assign(testId, this.#recurse(ast.test)),
-        )
-        this.#if_(testId, this.#assign(intoId, this.#recurse(ast.consequent)))
-        this.#if_(
-          this.#not(testId),
-          this.#assign(intoId, this.#recurse(ast.alternate)),
-        )
+
+        this.#bodyPush(this.#assign(testId, this.#recurse(ast.test)))
+        this.#addIf(testId, this.#assign(intoId, this.#recurse(ast.consequent)))
+        const alternate = this.#recurse(ast.alternate)
+        this.#addIf(this.#not(testId), this.#assign(intoId, alternate))
+
         return intoId
       }
     }
   }
 
-  #if_(test, consequent) {
-    this.state[this.state.computing].body.push(
-      'if(',
-      test,
-      '){',
-      consequent,
-      '}',
-    )
+  #addIf(test, consequent) {
+    this.#bodyPush('if(', test, '){', consequent, '}')
   }
 
   #ifDefined_ = (value, defaultValue) =>
@@ -382,21 +362,13 @@ export class ASTCompiler {
     typeof value === 'undefined' ? defaultValue : value
 
   #addEnsureSafeMemberName(expr) {
-    this.state[this.state.computing].body.push(
-      'ensureSafeMemberName(' + expr + ');',
-    )
+    this.#bodyPush('ensureSafeMemberName(' + expr + ');')
   }
-
   #addEnsureSafeObject(expr) {
-    this.state[this.state.computing].body.push(
-      'ensureSafeObject(' + expr + ');',
-    )
+    this.#bodyPush('ensureSafeObject(' + expr + ');')
   }
-
   #addEnsureSafeFunction(expr) {
-    this.state[this.state.computing].body.push(
-      'ensureSafeFunction(' + expr + ');',
-    )
+    this.#bodyPush('ensureSafeFunction(' + expr + ');')
   }
 
   #watchFns() {

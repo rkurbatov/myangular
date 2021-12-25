@@ -33,7 +33,7 @@ export class AST {
       if (this.tokens.length) {
         body.push(this.#filter())
       }
-      if (!this.#expect(';')) {
+      if (!this.#peekAndTake(';')) {
         return { type: AST.Program, body }
       }
     }
@@ -57,7 +57,7 @@ export class AST {
   // 11. Filter
   #filter() {
     let left = this.#assignment()
-    while (this.#expect('|')) {
+    while (this.#peekAndTake('|')) {
       const args = [left]
       left = {
         type: AST.CallExpression,
@@ -66,7 +66,7 @@ export class AST {
         filter: true, // Unlike normal functions filters are not in the scope
       }
       // Parse filter params
-      while (this.#expect(':')) {
+      while (this.#peekAndTake(':')) {
         args.push(this.#assignment())
       }
     }
@@ -76,7 +76,7 @@ export class AST {
 
   #assignment() {
     const left = this.#ternary()
-    if (this.#expect('=')) {
+    if (this.#peekAndTake('=')) {
       const right = this.#ternary()
       return {
         type: AST.AssignmentExpression,
@@ -90,9 +90,9 @@ export class AST {
 
   #ternary() {
     const test = this.#logicalOr()
-    if (this.#expect('?')) {
+    if (this.#peekAndTake('?')) {
       const consequent = this.#assignment()
-      if (this.#consume(':')) {
+      if (this.#expect(':')) {
         const alternate = this.#assignment()
         return {
           type: AST.ConditionalExpression,
@@ -109,7 +109,7 @@ export class AST {
   #logicalOr() {
     let left = this.#logicalAnd()
     let token
-    while ((token = this.#expect('||'))) {
+    while ((token = this.#peekAndTake('||'))) {
       left = {
         type: AST.LogicalExpression,
         left,
@@ -124,7 +124,7 @@ export class AST {
   #logicalAnd() {
     let left = this.#equality()
     let token
-    while ((token = this.#expect('&&'))) {
+    while ((token = this.#peekAndTake('&&'))) {
       left = {
         type: AST.LogicalExpression,
         left,
@@ -139,7 +139,7 @@ export class AST {
   #equality() {
     let left = this.#relational()
     let token
-    while ((token = this.#expect('==', '===', '!=', '!=='))) {
+    while ((token = this.#peekAndTake('==', '===', '!=', '!=='))) {
       left = {
         type: AST.BinaryExpression,
         left,
@@ -154,7 +154,7 @@ export class AST {
   #relational() {
     let left = this.#additive()
     let token
-    while ((token = this.#expect('>', '<', '>=', '<='))) {
+    while ((token = this.#peekAndTake('>', '<', '>=', '<='))) {
       left = {
         type: AST.BinaryExpression,
         left,
@@ -169,7 +169,7 @@ export class AST {
   #additive() {
     let left = this.#multiplicative()
     let token
-    while ((token = this.#expect('+', '-'))) {
+    while ((token = this.#peekAndTake('+', '-'))) {
       left = {
         type: AST.BinaryExpression,
         left,
@@ -186,7 +186,7 @@ export class AST {
     let token
 
     // Fallbacks to the unary in the worst case
-    while ((token = this.#expect('*', '/', '%'))) {
+    while ((token = this.#peekAndTake('*', '/', '%'))) {
       left = {
         type: AST.BinaryExpression,
         left,
@@ -199,7 +199,7 @@ export class AST {
   }
 
   #unary() {
-    const token = this.#expect('+', '!', '-')
+    const token = this.#peekAndTake('+', '!', '-')
     if (token) {
       return {
         type: AST.UnaryExpression,
@@ -213,13 +213,13 @@ export class AST {
 
   #primary() {
     let primary
-    if (this.#expect('(')) {
+    if (this.#peekAndTake('(')) {
       // Start new precedence chain for parentheses
       primary = this.#filter()
-      this.#consume(')')
-    } else if (this.#expect('[')) {
+      this.#expect(')')
+    } else if (this.#peekAndTake('[')) {
       primary = this.#array()
-    } else if (this.#expect('{')) {
+    } else if (this.#peekAndTake('{')) {
       primary = this.#object()
     } else if (this.tokens[0].text in AST.#primitiveValues) {
       primary = this.#primitiveValue()
@@ -231,7 +231,7 @@ export class AST {
 
     // Object property lookup both computed and non-computed and function calls
     let next
-    while ((next = this.#expect('.', '[', '('))) {
+    while ((next = this.#peekAndTake('.', '[', '('))) {
       if (next.text === '[') {
         // Computed expression (x[24], x['someField'], x[someField])
         primary = {
@@ -240,7 +240,7 @@ export class AST {
           property: this.#primary(),
           computed: true,
         }
-        this.#consume(']')
+        this.#expect(']')
       } else if (next.text === '.') {
         // Non-computed expression (x.someField)
         primary = {
@@ -255,24 +255,18 @@ export class AST {
           callee: primary,
           arguments: this.#parseArguments(),
         }
-        this.#consume(')')
+        this.#expect(')')
       }
     }
 
     return primary
   }
 
-  #constant() {
-    return { type: AST.Literal, value: this.#consume().value }
-  }
+  #constant = () => ({ type: AST.Literal, value: this.#expect().value })
 
-  #identifier() {
-    return { type: AST.Identifier, name: this.#consume().text }
-  }
+  #identifier = () => ({ type: AST.Identifier, name: this.#expect().text })
 
-  #primitiveValue() {
-    return AST.#primitiveValues[this.#consume().text]
-  }
+  #primitiveValue = () => AST.#primitiveValues[this.#expect().text]
 
   #array() {
     const elements = []
@@ -282,9 +276,9 @@ export class AST {
           break // Trailing coma case
         }
         elements.push(this.#assignment())
-      } while (this.#expect(','))
+      } while (this.#peekAndTake(','))
     }
-    this.#consume(']')
+    this.#expect(']')
     return { type: AST.ArrayExpression, elements }
   }
 
@@ -296,12 +290,12 @@ export class AST {
         property.key = this.#peek().identifier
           ? this.#identifier()
           : this.#constant()
-        this.#consume(':')
+        this.#expect(':')
         property.value = this.#assignment()
         properties.push(property)
-      } while (this.#expect(','))
+      } while (this.#peekAndTake(','))
     }
-    this.#consume('}')
+    this.#expect('}')
     return { type: AST.ObjectExpression, properties }
   }
 
@@ -310,7 +304,7 @@ export class AST {
     if (!this.#peek(')')) {
       do {
         args.push(this.#assignment())
-      } while (this.#expect(','))
+      } while (this.#peekAndTake(','))
     }
     return args
   }
@@ -324,16 +318,16 @@ export class AST {
     }
   }
 
-  // @TODO: rename to peekAndTake()
-  #expect(...elements) {
+  // Named `expect()` in original AngularJS implementation
+  #peekAndTake(...elements) {
     if (this.#peek(...elements)) {
       return this.tokens.shift()
     }
   }
 
-  // @TODO: rename to expect()
-  #consume(e) {
-    const token = this.#expect(e)
+  // Named `consume()` in original AngularJS implementation
+  #expect(e) {
+    const token = this.#peekAndTake(e)
     if (!token) {
       throw 'Unexpected! Expecting: ' + e
     }
