@@ -6,6 +6,17 @@ import { filter } from '../filter'
 export const isDomNode = (obj) =>
   obj.children && (obj.nodeName || (obj.prop && obj.find && obj.attr))
 
+export const isLiteral = (ast) =>
+  ast.body.length === 0 ||
+  (ast.body.length === 1 &&
+    [AST.Literal, AST.ArrayExpression, AST.ObjectExpression].includes(
+      ast.body[0].type,
+    ))
+
+export const isAssignable = (ast) =>
+  ast.body.length === 1 &&
+  [AST.Identifier, AST.MemberExpression].includes(ast.body[0].type)
+
 export const getInputs = (ast) => {
   if (ast.length === 1) {
     const candidate = ast[0].toWatch
@@ -14,13 +25,6 @@ export const getInputs = (ast) => {
     }
   }
 }
-
-export const isLiteral = (ast) =>
-  ast.body.length === 0 ||
-  (ast.body.length === 1 &&
-    [AST.Literal, AST.ArrayExpression, AST.ObjectExpression].includes(
-      ast.body[0].type,
-    ))
 
 export const ensure = {
   safeMemberName: (name) => {

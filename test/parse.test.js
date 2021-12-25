@@ -809,4 +809,21 @@ describe('parse', () => {
       expect(parse('a ? b : c').constant).toBe(false)
     })
   })
+
+  describe('external assignments', () => {
+    it('allows calling assign on identifier expressions', () => {
+      const fn = parse('anAttribute')
+      expect(fn.assign).toBeDefined()
+      const scope = {}
+      fn.assign(scope, 42)
+      expect(scope.anAttribute).toBe(42)
+    })
+    it('allows calling assign on member expressions', () => {
+      const fn = parse('anObject.anAttribute')
+      expect(fn.assign).toBeDefined()
+      const scope = {}
+      fn.assign(scope, 42)
+      expect(scope.anObject).toEqual({ anAttribute: 42 })
+    })
+  })
 })

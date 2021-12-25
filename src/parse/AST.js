@@ -334,6 +334,14 @@ export class AST {
     return token
   }
 
+  static externalAssignment = (ast) => ({
+    type: AST.AssignmentExpression,
+    left: ast.body[0],
+    right: {
+      type: AST.NGValueParameter,
+    },
+  })
+
   static Program = 'Program'
   static Literal = 'Literal'
   static ArrayExpression = 'ArrayExpression'
@@ -349,6 +357,7 @@ export class AST {
   static BinaryExpression = 'BinaryExpression'
   static LogicalExpression = 'LogicalExpression'
   static ConditionalExpression = 'ConditionalExpression'
+  static NGValueParameter = 'NGValueParameter'
 
   static #primitiveValues = {
     null: { type: AST.Literal, value: null },

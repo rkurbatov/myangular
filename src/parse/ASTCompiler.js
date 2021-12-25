@@ -6,6 +6,7 @@ import {
   escape,
   getInputs,
   isLiteral,
+  isAssignable,
   markConstantAndWatchExpressions,
 } from './astHelpers'
 import { filter } from '../filter'
@@ -42,6 +43,10 @@ export class ASTCompiler {
         body: [], // elements of a generated evaluation function
         vars: [], // intermediate vars created for storing values
       },
+      assign: {
+        body: [], // keeps assignment expression state
+        vars: [],
+      },
       inputs: [],
       nextId: 0, // basis of unique ids used by function
       filters: {}, // list of registered filters used in expression
@@ -50,6 +55,7 @@ export class ASTCompiler {
 
   compile(text) {
     const ast = this.astBuilder.ast(text)
+    let extra = ''
     markConstantAndWatchExpressions(ast)
 
     this.stage = 'inputs'
@@ -61,6 +67,19 @@ export class ASTCompiler {
       this.state.inputs.push(inputKey)
     })
 
+    this.stage = 'assign'
+    if (isAssignable(ast)) {
+      this.state.computing = 'assign'
+      this.state.assign.body.push(this.#recurse(AST.externalAssignment(ast)))
+      extra =
+        'fn.assign = function(s,v,l){' +
+        (this.state.assign.vars.length
+          ? 'var ' + this.state.assign.vars.join(',') + ';'
+          : '') +
+        this.state.assign.body.join('') +
+        '};'
+    }
+
     this.stage = 'main'
     this.state.computing = 'fn'
     this.#recurse(ast)
@@ -71,6 +90,7 @@ export class ASTCompiler {
         ${this.#varsDefinition()} ${this.state.fn.body.join('')}
       };
       ${this.#watchFns()}
+      ${extra}
       return fn;`
 
     const fn = new Function(
@@ -171,6 +191,9 @@ export class ASTCompiler {
 
       case AST.LocalsExpression:
         return 'l'
+
+      case AST.NGValueParameter:
+        return 'v'
 
       case AST.MemberExpression: {
         const intoId = this.#nextId()
