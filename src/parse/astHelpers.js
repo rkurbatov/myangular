@@ -2,9 +2,7 @@ import { isNull, isString, reduce } from 'lodash'
 
 import { AST } from './AST'
 import { filter } from '../filter'
-
-export const isDomNode = (obj) =>
-  obj.children && (obj.nodeName || (obj.prop && obj.find && obj.attr))
+import { isDomNode } from '../helpers'
 
 export const isLiteral = (ast) =>
   ast.body.length === 0 ||
@@ -16,6 +14,9 @@ export const isLiteral = (ast) =>
 export const isAssignable = (ast) =>
   ast.body.length === 1 &&
   [AST.Identifier, AST.MemberExpression].includes(ast.body[0].type)
+
+export const ifDefined = (value, defaultValue) =>
+  typeof value === 'undefined' ? defaultValue : value
 
 export const getInputs = (ast) => {
   if (ast.length === 1) {

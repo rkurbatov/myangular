@@ -1,13 +1,13 @@
 import {
   isFunction,
   isUndefined,
-  isNaN,
   noop,
   some,
   times,
   constant,
 } from 'lodash'
 
+import { simpleCompare } from '../helpers'
 import { Lexer } from './Lexer'
 import { AST } from './AST'
 import { ASTCompiler } from './ASTCompiler'
@@ -125,7 +125,7 @@ function inputsWatchDelegate(scope, listenerFn, valueEq, watchFn) {
       let changed = false
       inputsExpressions.forEach((inputExpr, i) => {
         const newValue = inputExpr(scope)
-        if (changed || !expressionInputDirtyCheck(newValue, oldValues[i])) {
+        if (changed || !simpleCompare(newValue, oldValues[i])) {
           changed = true
           oldValues[i] = newValue
         }
@@ -140,6 +140,3 @@ function inputsWatchDelegate(scope, listenerFn, valueEq, watchFn) {
     valueEq,
   )
 }
-
-const expressionInputDirtyCheck = (newValue, oldValue) =>
-  newValue === oldValue || (Number.isNaN(newValue) && Number.isNaN(oldValue))

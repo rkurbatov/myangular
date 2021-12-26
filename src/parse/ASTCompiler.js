@@ -7,6 +7,7 @@ import {
   getInputs,
   isLiteral,
   isAssignable,
+  ifDefined,
   markConstantAndWatchExpressions,
 } from './astHelpers'
 import { filter } from '../filter'
@@ -104,7 +105,7 @@ export class ASTCompiler {
       ensure.safeMemberName,
       ensure.safeObject,
       ensure.safeFunction,
-      this.#ifDefined,
+      ifDefined,
       filter,
     )
     fn.literal = isLiteral(ast)
@@ -127,12 +128,22 @@ export class ASTCompiler {
         break
       }
 
+      case AST.ThisExpression:
+        return 's'
+
+      case AST.LocalsExpression:
+        return 'l'
+
+      case AST.NGValueParameter:
+        return 'v'
+
       case AST.Literal:
         return escape(ast.value)
 
-      case AST.ArrayExpression:
+      case AST.ArrayExpression: {
         const elements = ast.elements.map((element) => this.#recurse(element))
         return '[' + elements.join(',') + ']'
+      }
 
       case AST.ObjectExpression: {
         const properties = ast.properties.map((p) => {
@@ -185,15 +196,6 @@ export class ASTCompiler {
         this.#addEnsureSafeObject(intoId)
         return intoId
       }
-
-      case AST.ThisExpression:
-        return 's'
-
-      case AST.LocalsExpression:
-        return 'l'
-
-      case AST.NGValueParameter:
-        return 'v'
 
       case AST.MemberExpression: {
         const intoId = this.#nextId()
@@ -291,7 +293,7 @@ export class ASTCompiler {
       }
 
       case AST.UnaryExpression: {
-        const argument = this.#ifDefined_(this.#recurse(ast.argument), 0)
+        const argument = this.#ifDefined(this.#recurse(ast.argument), 0)
 
         return ast.operator + '(' + argument + ')'
       }
@@ -301,8 +303,8 @@ export class ASTCompiler {
         const right = this.#recurse(ast.right)
 
         if (['+', '-'].includes(ast.operator)) {
-          const defLeft = this.#ifDefined_(left, 0)
-          const defRight = this.#ifDefined_(right, 0)
+          const defLeft = this.#ifDefined(left, 0)
+          const defRight = this.#ifDefined(right, 0)
 
           return '(' + defLeft + ')' + ast.operator + '(' + defRight + ')'
         } else {
@@ -340,9 +342,6 @@ export class ASTCompiler {
     this.#bodyPush('if(', test, '){', consequent, '}')
   }
 
-  #ifDefined_ = (value, defaultValue) =>
-    'ifDefined(' + value + ',' + escape(defaultValue) + ')'
-
   #nextId(skip) {
     const id = 'v' + this.state.nextId++
     if (!skip) this.state[this.state.computing].vars.push(id)
@@ -375,14 +374,14 @@ export class ASTCompiler {
   #assign = (id, value) => id + '=' + value + ';'
   #not = (e) => '!(' + e + ')'
 
+  #ifDefined = (value, defaultValue) =>
+    'ifDefined(' + value + ',' + escape(defaultValue) + ')'
+
   #getHasOwnProperty = (object, property) =>
     object + ' && (' + escape(property) + ' in ' + object + ')'
 
   #nonComputedMember = (left, right) => '(' + left + ').' + right
   #computedMember = (left, right) => '(' + left + ')[' + right + ']'
-
-  #ifDefined = (value, defaultValue) =>
-    typeof value === 'undefined' ? defaultValue : value
 
   #addEnsureSafeMemberName(expr) {
     this.#bodyPush('ensureSafeMemberName(' + expr + ');')

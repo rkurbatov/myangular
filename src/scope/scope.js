@@ -9,6 +9,7 @@ import {
 } from 'lodash'
 
 import { parse } from '../parse'
+import { simpleCompare } from '../helpers'
 
 // Symbol is a reference value, as it equals only to itself.
 // It is set as an initial watch value to distinct it from undefined
@@ -32,7 +33,8 @@ export class Scope {
   // watchFn - is the function taking the scope as an argument and returning value we should watch
   // listenerFn - is the function that is called on data change
   // valueEq — should we use shallow equality check instead of reference check
-  $watch(watchFn, listenerFn = () => {}, valueEq = false) {
+  $watch(watchFn, listenerFn = () => {
+  }, valueEq = false) {
     const parsedWatchFn = parse(watchFn)
 
     if (parsedWatchFn.$$watchDelegate) {
@@ -67,16 +69,10 @@ export class Scope {
     }
   }
 
-  static $$areEqual(newValue, oldValue, valueEq) {
-    if (valueEq) {
-      return isEqual(newValue, oldValue) // shallow equality
-    } else {
-      // Simple equality
-      return (
-        newValue === oldValue ||
-        (Number.isNaN(newValue) && Number.isNaN(oldValue))
-      )
-    }
+  static $$areEqual (newValue, oldValue, valueEq) {
+    return valueEq ?
+      isEqual(newValue, oldValue) // shallow equality
+      : simpleCompare(newValue, oldValue) // simple equality
   }
 
   static $$isArrayLike(item) {
@@ -395,7 +391,8 @@ export class Scope {
       child.$$postDigestQueue = parent.$$postDigestQueue
       child.$$applyAsyncQueue = parent.$$applyAsyncQueue
     } else {
-      const ChildScope = class {}
+      const ChildScope = class {
+      }
       // Class cannot extend object (this) so we need to set prototype explicitly
       Object.setPrototypeOf(ChildScope.prototype, this)
 
