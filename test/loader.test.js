@@ -30,6 +30,7 @@ describe('setupModuleLoader', () => {
 
   describe('modules', () => {
     beforeEach(() => {
+      delete window.angular
       setupModuleLoader(window)
     })
 

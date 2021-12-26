@@ -8,7 +8,15 @@ export function setupModuleLoader(window) {
       throw '"hasOwnProperty" is not a valid module name'
     }
 
-    const moduleInstance = { name, requires }
+    const invokeQueue = []
+    const moduleInstance = {
+      name,
+      requires,
+      constant: function (key, value) {
+        invokeQueue.push(['constant', [key, value]])
+      },
+      _invokeQueue: invokeQueue,
+    }
     modules[name] = moduleInstance
     return moduleInstance
   }
