@@ -1,8 +1,9 @@
 import { forEach, dropRight } from 'lodash'
 
-export function createInjector(modulesToLoad) {
+export function createInjector(modulesToLoad, strictDi) {
   const cache = {}
   const loadedModules = {} // keeps map of loaded modules to prevent circular dependencies
+  strictDi = strictDi === true // the value should be true, not just truthy
 
   const $provide = {
     constant: function (key, value) {
@@ -51,8 +52,26 @@ export function createInjector(modulesToLoad) {
     } else if (fn.$inject) {
       // fn.$inject = ['a', 'b'] case
       return fn.$inject
-    } else {
+    } else if (!fn.length) {
+      // Non-annotated function without arguments
       return []
+    } else {
+      if (strictDi) {
+        throw 'fn is not using explicit annotation and cannot be invoked in strict mode'
+      }
+
+      // Extracts arguments list out of function definition
+      const FN_ARGS = /^function\s*[^(]*\(\s*([^)]*)\)/m
+      // Removes surrounding whitespaces (and underscores like _a_ => a)
+      const FN_ARG = /^\s*(_?)(\S+?)\1\s*$/
+      // Strips two types of comments, multiline
+      const STRIP_COMMENTS = /(\/\/.*$)|(\/\*.*?\*\/)/gm
+
+      const source = fn.toString().replace(STRIP_COMMENTS, '')
+      const argDeclaration = source.match(FN_ARGS)
+      return argDeclaration[1]
+        .split(',')
+        .map((argName) => argName.match(FN_ARG)[2])
     }
   }
 
