@@ -1,4 +1,4 @@
-import { forEach, dropRight } from 'lodash'
+import { forEach, dropRight, last } from 'lodash'
 
 export function createInjector(modulesToLoad, strictDi) {
   const cache = {}
@@ -32,7 +32,7 @@ export function createInjector(modulesToLoad, strictDi) {
 
   // Applies injected arguments to the provided function
   const invoke = (fn, self, locals) => {
-    const args = (fn.$inject || []).map((token) => {
+    const args = annotate(fn).map((token) => {
       if (typeof token === 'string') {
         // Provided locals can override injections (used by directives)
         return locals && locals.hasOwnProperty(token)
@@ -42,6 +42,9 @@ export function createInjector(modulesToLoad, strictDi) {
         throw 'Incorrect injection token! Expected a string, got ' + token
       }
     })
+    if (Array.isArray(fn)) {
+      fn = last(fn)
+    }
     return fn.apply(self, args)
   }
 
@@ -75,10 +78,19 @@ export function createInjector(modulesToLoad, strictDi) {
     }
   }
 
+  // Used to inject constructor functions
+  const instantiate = (Type, locals) => {
+    const UnwrappedType = Array.isArray(Type) ? last(Type) : Type
+    const instance = Object.create(UnwrappedType.prototype)
+    invoke(Type, instance, locals)
+    return instance
+  }
+
   return {
     has: (key) => cache.hasOwnProperty(key),
     get: (key) => cache[key],
     invoke,
     annotate,
+    instantiate,
   }
 }
